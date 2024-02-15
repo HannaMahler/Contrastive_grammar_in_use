@@ -1,0 +1,170 @@
+---
+title: "GECCo_Metainfo"
+author: "Hanna Mahler"
+date: "9 6 2021"
+output: html_document
+---
+
+This script needs to be run prior to the main analysis, it collects and produces the meta-data for each text and subsequently for each register in the corpus.
+
+#1. Load libraries
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+```
+
+#2. Load data
+
+##2.1 Sentences data
+This data was arrived at by searching for <s>[]*</s> in the whole GECCo Corpus (UPOS versions).
+The data is stored in the form of concordances in two txt-files, one for English and one for German. *Due to copyright reasons I am unfortunately not allowed to make these files publicly available, but I can provide a copy to interested researchers.*
+```{r}
+## English concordance (from version "GECCo English Original Universal POS")
+concordance_EO_s <- read.delim("Concordances/concordance_EO_s.txt", quote = "")
+colnames(concordance_EO_s) = c("NR", "Text_id", "text_raw", "text_tagged", "mode", "register", "URL", "start", "end")
+View(concordance_EO_s) 
+
+## German concordance (from version "GECCo German Original Universal PoS")
+concordance_GO_s <- read.delim("Concordances/concordance_GO_s.txt", quote = "")
+colnames(concordance_GO_s) = c("NR", "Text_id", "text_raw", "text_tagged", "mode", "register", "URL", "start", "end")
+View(concordance_GO_s)
+```
+
+##2.2 STTR data
+This data was provided by Prof. Lapshinova-Koltunski
+```{r}
+# read in file
+sttr_100 <- read.delim("sttr_100.csv")
+colnames(sttr_100) = c("Text_id", "NR_chunks", "TTR_max", "TTR_min", "TTR_sd", "STTR")
+View(sttr_100) 
+## this file contains the text_id, the number of equally-sized chunks in which the text was partitioned, the maximum and minimum TTR for all of these chunks, the standard deviation, and finally the standardised type-token ratio (STTR) for each text.
+```
+
+
+#3. Calculate measurements
+
+##3.1 Number of sentences per text
+To get the number of sentences for each corpus text (English and German), one needs to count how often a specific text-ID occurs in the data frame that contains all sentences.
+```{r}
+# English
+sentences_count_E = count(concordance_EO_s, Text_id)
+colnames(sentences_count_E) = c("Text_id", "NR_sentences")
+
+# German
+sentences_count_G = count(concordance_GO_s, Text_id)
+colnames(sentences_count_G) = c("Text_id", "NR_sentences")
+
+## combine both data frames into one
+sentences_count = bind_rows(sentences_count_E, sentences_count_G)
+#View(sentences_count)
+```
+
+
+#4. Add measurements to existing table
+The table Overview_texts_TTR contains two relevant columns: NR_tokens_withPUNCT is the total number of tokens in the UPOS-version of the corpus for each text (this includes punctuation marks). The column NR_tokens contains the number of tokens in each text when considering only words (excluding everything tagged as PUNCT). The column NR_tokens is the result of searching for [upos != "PUNCT"] in the UPOS-version of the English and German corpus, extracting the concordance lines, importing them into Excel, and counting the items for each text.
+```{r}
+## load existing table
+text_table_1 = read_excel("Overview_texts_TTR.xlsx")
+
+## add count of sentences for each text to table
+text_table_2 = left_join(text_table_1, sentences_count, by = "Text_id")
+
+## add average number of words per sentence in a new column
+text_table_3 = mutate(text_table_2, sentence_length = NR_tokens/NR_sentences) # divide number of tokens by number of sentence for each text
+  
+## add information on type-token-ration for each text to the table
+text_table_4 = left_join(text_table_3, sttr_100, by = "Text_id")
+
+## check results
+text_table = text_table_4
+View(text_table)
+
+## save new table (this step does not need to be run, since I already saved the new table)
+#write_xlsx(text_table, path = "Overview_texts.xlsx")
+```
+
+
+#5. Create average values for each register
+
+So far, the data frames contained individual values for each text. Now, let's summarise together the texts in each register and create a new data frame that only has the average values for each register (including min, max, and sd) for each language separately
+```{r}
+## first, separate the data frame into an English and a German version (This is necessary since I want to group by Register, and register contains no information on language, so German and English texts would be grouped together, which we don't want)
+text_table_E = filter(text_table, Language == "English")
+text_table_G = filter(text_table, Language == "German")
+```
+
+For English
+```{r, message = FALSE}
+register_table_E = text_table_E %>%
+  group_by(Register) %>%
+  summarise(Nr_sentences_av = mean(NR_sentences))
+
+## add sum, min value, max value and standard deviation for the number of sentences
+register_table_E$Nr_sentences_sum = pull(summarise(group_by(text_table_E, Register), sum(NR_sentences)), 2)
+register_table_E$Nr_sentences_min = pull(summarise(group_by(text_table_E, Register), min(NR_sentences)), 2)
+register_table_E$Nr_sentences_max = pull(summarise(group_by(text_table_E, Register), max(NR_sentences)), 2)
+register_table_E$Nr_sentences_sd = pull(summarise(group_by(text_table_E, Register), sd(NR_sentences)), 2)
+
+## add sum and mean for the number of tokens
+register_table_E$Nr_tokens_sum = pull(summarise(group_by(text_table_E, Register), sum(NR_tokens)), 2)
+register_table_E$Nr_tokens_av = pull(summarise(group_by(text_table_E, Register), mean(NR_tokens)), 2)
+
+## add mean sentences length
+register_table_E$sentence_length_av = pull(summarise(group_by(text_table_E, Register), mean(sentence_length)), 2)
+
+## add sum, min value, max value and standard deviation for standardised type-token ratio
+register_table_E$STTR_av = pull(summarise(group_by(text_table_E, Register), mean(STTR)), 2)
+register_table_E$STTR_min = pull(summarise(group_by(text_table_E, Register),min(STTR)), 2)
+register_table_E$STTR_max = pull(summarise(group_by(text_table_E, Register), max(STTR)), 2)
+register_table_E$STTR_sd = pull(summarise(group_by(text_table_E, Register), sd(STTR)), 2)
+
+register_table_E$Language = "English"
+#View(register_table_E)
+```
+
+For German
+```{r, message = FALSE}
+register_table_G = text_table_G %>%
+  group_by(Register) %>%
+  summarise(Nr_sentences_av = mean(NR_sentences))
+
+## add sum, min value, max value and standard deviation for the number of sentences
+register_table_G$Nr_sentences_sum = pull(summarise(group_by(text_table_G, Register), sum(NR_sentences)), 2)
+register_table_G$Nr_sentences_min = pull(summarise(group_by(text_table_G, Register), min(NR_sentences)), 2)
+register_table_G$Nr_sentences_max = pull(summarise(group_by(text_table_G, Register), max(NR_sentences)), 2)
+register_table_G$Nr_sentences_sd = pull(summarise(group_by(text_table_G, Register), sd(NR_sentences)), 2)
+
+## add sum and mean for the number of tokens
+register_table_G$Nr_tokens_sum = pull(summarise(group_by(text_table_G, Register), sum(NR_tokens)), 2)
+register_table_G$Nr_tokens_av = pull(summarise(group_by(text_table_G, Register), mean(NR_tokens)), 2)
+
+## add mean sentences length
+register_table_G$sentence_length_av = pull(summarise(group_by(text_table_G, Register), mean(sentence_length)), 2)
+
+## add sum, min value, max value and standard deviation for standardised type-token ratio
+register_table_G$STTR_av = pull(summarise(group_by(text_table_G, Register), mean(STTR)), 2)
+register_table_G$STTR_min = pull(summarise(group_by(text_table_G, Register), min(STTR)), 2)
+register_table_G$STTR_max = pull(summarise(group_by(text_table_G, Register), max(STTR)), 2)
+register_table_G$STTR_sd = pull(summarise(group_by(text_table_G, Register), sd(STTR)), 2)
+
+register_table_G$Language = "German"
+#View(register_table_G) 
+```
+
+
+```{r}
+## combine tables back together into one all-encompassing register-table
+register_table = bind_rows(register_table_E, register_table_G)
+
+## add information on mode
+register_table$mode = ifelse(register_table$Register %in% c("ACADEMIC", "FORUM", "INTERVIEW", "MEDCONSULT", "SERMON", "TALKSHOW"), "spoken", "written")
+View(register_table)
+
+## save to file (this command does not need to be run, the resulting table is already saved in this folder)
+#write_xlsx(register_table, path = "Overview_registers.xlsx")
+```
+
+
+
+

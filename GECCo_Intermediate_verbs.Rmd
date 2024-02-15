@@ -1,0 +1,280 @@
+---
+title: "IntermediateVerbs"
+author: "Hanna Mahler"
+date: "2023-05-05"
+output: html_document
+---
+
+This scripts looks at the influence of what I call "intermediate verbs" (modal idioms, semi auxiliaries, and catenatives) on the count of verb phrases in English.
+
+In the existing data frame "vp_EO_messy_checked.xlsx" these intermediate verbs start off with the categorisation "type" == "main" and "finiteness" == "finite".
+
+#1. Load libraries
+
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse) ## needed for data wrangling
+library(readxl) ## needed for reading in data
+options(scipen = 999) # this turns off the scientific notation of very high/low numbers (e-10)
+set.seed(42) ## make results reproducible be setting seed to a specific number
+```
+
+#2. Load data
+
+First, load and inspect the pre-processed, tidy data.
+
+```{r df texts and registers}
+## data frame with texts
+texts <- read_excel("Overview_texts_vp.xlsx") %>%
+  mutate(Language = as.factor(Language),
+         Register = as.factor(Register), 
+         Mode = as.factor(Mode),
+         STTR_z = scale(STTR))
+## data frame with registers
+registers <- read_excel("Overview_registers_vp.xlsx")
+
+texts_EO = subset(texts, Language == "English")
+texts_GO = subset(texts, Language == "German")
+
+head(registers)
+head(texts)
+```
+
+We will also need the files with verbs as rows.
+
+```{r df verb phrases}
+vp_EO = read_excel("vp_EO_messy_checked.xlsx")
+vp_GO = read_excel("vp_GO_messy_checked.xlsx")
+
+## change name from "complement" to "nominal" and from "modifying" to "embedded" in all data frames
+# gsub(pattern, replace, x)
+vp_EO$clause_type = gsub("complement", "nominal", vp_EO$clause_type)
+vp_GO$clause_type = gsub("complement", "nominal", vp_GO$clause_type)
+vp_EO$clause_type = gsub("modifying", "embedded", vp_EO$clause_type)
+vp_GO$clause_type = gsub("modifying", "embedded", vp_GO$clause_type)
+
+## change language labels from the original "eng"/"deu" to "English"/"German"
+vp_EO$Language = gsub("eng", "English", vp_EO$Language)
+vp_GO$Language = gsub("deu", "German", vp_GO$Language)
+
+## combine into one data frame
+verbs = bind_rows(vp_EO, vp_GO)
+head(verbs)
+
+# data frame containing all English verb phrases marked as "non-finite"
+verbs_nf_EO = filter(vp_EO, finiteness == "non-finite", type == "main")
+# data frame containing all English verb phrases marked as "finite"
+verbs_f_EO = filter(vp_EO, finiteness == "finite", type == "main")
+
+# data frame containing all verb phrases in English
+verbs_EO <- vp_EO
+```
+
+#3. Data wrangling
+
+Procedure:
+1. For every text, we calculate the number of intermediate verbs (that are type == main and finiteness == finite) and save it as a new column "NR_intermediate"
+2. For every text, we create a new column "NR_vp_nf2" with the adjusted vp count by calculating: "NR_vp_nf" - "NR_intermediate".
+3. Based on the new column "NR_vp_nf2" we can calculate new columns with relative measurements: "vp_nf_pmw2", "vp_nf_phw2", "vp_nf_ps2", and "vp_nf_perc" (using the code from the GECCo_Verbs scripts) for each text.
+4. We can then make graphs that compare the alternative way of counting with the original way of counting ("vp_nf_phw" vs. "vp_nf_phw2").
+
+```{r calculate number of intermediate verbs per text}
+count_intermediate <- verbs_EO %>%
+  group_by(Text_id) %>%
+  ## (take out intermediates only when they are finite! There are also uses as non-finite verb phrases, e.g. "I need to be able to think")
+  filter(other != "unknown" & type == "main" & finiteness == "finite") %>%
+  count()
+
+colnames(count_intermediate) = c("Text_id", "NR_intermediate")
+count_intermediate
+```
+
+```{r add number of intermediates to df texts}
+texts_EO <- left_join(texts_EO, count_intermediate, by = "Text_id")
+colnames(texts_EO)
+
+## replace NAs with 0 in column NR_intermediate
+for (n in 1:nrow(texts_EO)) {
+if (is.na(texts_EO[n, 95])) { # 95 indicates the 95th column, which is NR_intermediate
+  texts_EO[n, 95] <- 0 }
+}
+
+summary(texts_EO$NR_intermediate)
+```
+
+```{r create new columns in df texts}
+texts_EO <- texts_EO %>%
+  mutate(NR_vp_nf2 = NR_vp_nf - NR_intermediate) %>%
+  mutate(NR_vp2 = NR_vp_nf2 + NR_vp_f) %>%
+  mutate(vp_phw2 = (NR_vp2/NR_tokens)*100) %>%
+  mutate(vp_nf_pmw2 = (NR_vp_nf2/NR_tokens)*1000000) %>% 
+  mutate(vp_nf_phw2 = (NR_vp_nf2/NR_tokens)*100) %>%
+  mutate(vp_nf_ps2 = NR_vp_nf2/NR_sentences) %>%
+  mutate(vp_nf_perc2 = NR_vp_nf2/NR_vp2)
+
+texts_GO <- texts_GO %>%
+  mutate(NR_vp_nf2 = NR_vp_nf) %>%
+  mutate(NR_vp2 = NR_vp) %>%
+  mutate(vp_phw2 = vp_phw) %>%
+  mutate(vp_nf_pmw2 = vp_nf_pmw) %>% 
+  mutate(vp_nf_phw2 = vp_nf_phw) %>%
+  mutate(vp_nf_ps2 = vp_nf_ps) %>%
+  mutate(vp_nf_perc2 = vp_nf_perc)
+
+texts2 = bind_rows(texts_EO, texts_GO)
+```
+
+```{r create new columns on non-finite verb phrases in df registers}
+## first, create a column with the sum of counts
+registers_nf_0 = texts2 %>%
+  group_by(RegisterID) %>%
+  summarise(NR_vp_nf2 = sum(NR_vp_nf2, na.rm = TRUE))
+colnames(registers_nf_0) = c("RegisterID", "NR_vp_nf2")
+
+## create a new column with measurement phw
+registers_nf_2 = texts2 %>%
+  group_by(RegisterID) %>%
+  summarise(vp_nf_phw_av2 = mean(vp_nf_phw2, na.rm = TRUE))
+colnames(registers_nf_2) = c("RegisterID", "vp_nf_phw_av2")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_nf_2$vp_nf_phw_min2 = pull(summarise(group_by(texts2, RegisterID), min(vp_nf_phw2, na.rm = TRUE)), 2)
+registers_nf_2$vp_nf_phw_max2 = pull(summarise(group_by(texts2, RegisterID), max(vp_nf_phw2, na.rm = TRUE)), 2)
+registers_nf_2$vp_nf_phw_sd2 = pull(summarise(group_by(texts2, RegisterID), sd(vp_nf_phw2, na.rm = TRUE)), 2)
+
+## combine into one df
+registers_nf02 = left_join(registers_nf_0, registers_nf_2, by = "RegisterID")
+## add this to existing register table
+registers = left_join(registers, registers_nf02, by = c("RegisterID"))
+```
+
+```{r create new columns on verb phrases in df registers}
+## first, create a column with the sum of counts
+registers_nf_0 = texts2 %>%
+  group_by(RegisterID) %>%
+  summarise(NR_vp2 = sum(NR_vp2, na.rm = TRUE))
+colnames(registers_nf_0) = c("RegisterID", "NR_vp2")
+
+## create a new column with measurement phw
+registers_nf_2 = texts2 %>%
+  group_by(RegisterID) %>%
+  summarise(vp_phw_av2 = mean(vp_phw2, na.rm = TRUE))
+colnames(registers_nf_2) = c("RegisterID", "vp_phw_av2")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_nf_2$vp_phw_min2 = pull(summarise(group_by(texts2, RegisterID), min(vp_phw2, na.rm = TRUE)), 2)
+registers_nf_2$vp_phw_max2 = pull(summarise(group_by(texts2, RegisterID), max(vp_phw2, na.rm = TRUE)), 2)
+registers_nf_2$vp_phw_sd2 = pull(summarise(group_by(texts2, RegisterID), sd(vp_phw2, na.rm = TRUE)), 2)
+
+## combine into one df
+registers_nf02 = left_join(registers_nf_0, registers_nf_2, by = "RegisterID")
+## add this to existing register table
+registers = left_join(registers, registers_nf02, by = c("RegisterID"))
+```
+
+#4. Plotting
+
+##4.1 Plotting the difference between NR_vp_nf and NR_vp_nf2
+
+```{r per register}
+## first, reorder data frame from above
+registers$Register = with(registers, reorder(Register, vp_nf_phw_av))
+
+## point plot
+ggplot(data = subset(registers, Language == "English")) + 
+  geom_point(mapping = aes(x = vp_nf_phw_av, y = Register)) +
+  geom_point(mapping = aes(x = vp_nf_phw_av2, y = Register), colour = "red") +
+  labs(x = "Average number of non-finite verb phrases phw", y = "Register", title = "Comparison of number of non-finite verb phrases phw in English by register\nred dots = counting intermediate verbs as auxiliaries") +
+  geom_vline(xintercept = mean(subset(registers, Language == "English")$vp_nf_phw_av), linetype = 2, color = "black") + 
+  geom_vline(xintercept = mean(subset(registers, Language == "English")$vp_nf_phw_av2), linetype = 2, color = "red") +
+  coord_cartesian(xlim = c(0, 6))
+```
+
+##4.2 Relationship between language and frequency of non-finite verb phrases
+
+```{r plotting}
+## as a box plot
+ggplot(data = texts2) + 
+  geom_boxplot(mapping = aes(x = vp_nf_phw2, y = Language, fill = Language), show.legend = FALSE) +
+  geom_vline(xintercept = mean(texts2$vp_nf_phw2), linetype = 2) + 
+  coord_cartesian(xlim = c(0, 6))
+```
+
+##4.3 Relationship between language and frequency of verb phrases
+
+```{r plotting}
+## as a box plot
+ggplot(data = texts2) + 
+  geom_boxplot(mapping = aes(x = vp_phw2, y = Language, fill = Language), show.legend = FALSE) +
+  geom_vline(xintercept = mean(texts2$vp_phw2), linetype = 2) + 
+  coord_cartesian(xlim = c(0, 25))
+```
+
+##4.4 Plotting the difference between NR_vp and NR_vp2
+
+```{r per register}
+## first, reorder data frame from above
+registers$Register = with(registers, reorder(Register, vp_phw_av))
+
+## point plot
+ggplot(data = subset(registers, Language == "English")) + 
+  geom_point(mapping = aes(x = vp_phw_av, y = Register)) +
+  geom_point(mapping = aes(x = vp_phw_av2, y = Register), colour = "red") +
+  labs(x = "Average number of verb phrases phw", y = "Register", title = "Comparison of number of verb phrases phw in English by register\nred dots = counting intermediate verbs as auxiliaries") +
+  geom_vline(xintercept = mean(subset(registers, Language == "English")$vp_phw_av), linetype = 2, color = "black") + 
+  geom_vline(xintercept = mean(subset(registers, Language == "English")$vp_phw_av2), linetype = 2, color = "red")
+```
+
+
+
+#5. Numbers
+
+```{r English summary statistics}
+## total number of verb phrases in the English data set, "normal analysis"
+sum(texts_EO$NR_vp_nf) + sum(texts_EO$NR_vp_f) #  68621
+## total number of verb phrases in the English data set, "alternative analysis"
+sum(texts_EO$NR_vp_nf2) + sum(texts_EO$NR_vp_f) # 66952
+
+## total number of non-finite verb phrases in the English data set, "normal analysis"
+sum(texts_EO$NR_vp_nf) # 15461
+## total number of non-finite verb phrases in the English data set, "alternative analysis"
+sum(texts_EO$NR_vp_nf2) # 13792
+
+## percentage of non-finite verbs of all verb phrases, "normal analysis"
+sum(texts_EO$NR_vp_nf)/(sum(texts_EO$NR_vp_nf) + sum(texts_EO$NR_vp_f)) # 0.22531
+## percentage of non-finite verbs of all verb phrases, "alternative analysis"
+sum(texts_EO$NR_vp_nf2)/(sum(texts_EO$NR_vp_nf2) + sum(texts_EO$NR_vp_f)) # 0.2059983
+
+## number of verb phrases phw in the English corpus, "normal"
+(sum(texts_EO$NR_vp_nf) + sum(texts_EO$NR_vp_f))/(sum(texts_EO$NR_tokens))*100 # 14.07143
+## number of verb phrases phw in the English corpus, "alternative analysis"
+(sum(texts_EO$NR_vp_nf2) + sum(texts_EO$NR_vp_f))/(sum(texts_EO$NR_tokens))*100 # 13.72918
+
+## number of non-finite verb phrases phw in the English corpus, "normal"
+(sum(texts_EO$NR_vp_nf))/(sum(texts_EO$NR_tokens))*100 # 3.170434
+## number of non-finite verb phrases phw in the English corpus, "alternative analysis"
+(sum(texts_EO$NR_vp_nf2))/(sum(texts_EO$NR_tokens))*100 # 2.828188
+```
+
+We can find out how many intermediate verbs we have in total by looking at the summary of column "other".
+*careful! This also includes uses as auxiliaries and as non-finite verb phrases!*
+
+```{r}
+summary(as.factor(verbs_EO$other))
+## there are 487 catenatives, 321 modal idioms and 1232 semi-auxiliaries.
+```
+
+We can look at which lemmas appear as intermediate verbs.
+
+```{r}
+intermediates <- verbs_EO %>%
+  filter(other != "unknown")
+summary(as.factor(intermediates$lemma))
+## most verbs in this category belong to the lemma "have" (728), followed by "go" (510), then "be" (282), and then get (199)
+```
+
+
+
+
+
+
+

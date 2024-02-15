@@ -1,0 +1,677 @@
+---
+title: "GECCo_Quality_check"
+author: "Hanna Mahler"
+date: "20 7 2021"
+output: html_document
+---
+
+This script can only be run after the "GECCo_Metainfo.Rmd" script. It is not necessary for the main analysis of verbs.
+Within this script, random samples of the data are produced and saved for the purpose of performing manual quality checks.
+The results of these checks are then read in and displayed.
+
+#1. Load libraries
+
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+options(scipen=999) ## to switch off scientific notations (6.234e-10)
+```
+
+#2. Load data
+
+##2.1 Sentence data
+This data was arrived at by searching for <s>[]*</s> in the whole GECCo Corpus (UPOS versions).
+The data is stored in the form of concordances in two txt-files, one for English and one for German. *Due to copyright reasons I am unfortunately not allowed to make these files publicly available, but I can provide a copy to interested researchers.*
+
+
+```{r}
+## English concordance (from version "GECCo English Original Universal POS")
+concordance_EO_s <- read.delim("Concordances/concordance_EO_s.txt")
+colnames(concordance_EO_s) = c("NR", "Text_id", "text_raw", "text_tagged", "medium", "register", "URL", "start", "end")
+concordance_EO_s = select(concordance_EO_s, NR, Text_id, text_raw)
+#View(concordance_EO_s)
+
+## German concordance (from version "GECCo German Original Universal PoS")
+concordance_GO_s <- read.delim("Concordances/concordance_GO_s.txt")
+colnames(concordance_GO_s) = c("NR", "Text_id", "text_raw", "text_tagged", "medium", "register", "URL", "start", "end")
+concordance_GO_s = select(concordance_GO_s, NR, Text_id, text_raw)
+
+### the following commands are necessary to ensure that the German umlauts are rendered correctly
+### Note: in the view() display the characters are still displayed incorrectly, despite being rendered properly in the head() display
+for (i in c("text_raw")) {
+  Encoding(concordance_GO_s[ ,i]) <- "UTF-8"
+}
+
+head(concordance_GO_s)
+```
+
+##2.2 UPOS data
+This data was arrived at by searching for [upos = ".*"] in the whole GECCo Corpus (UPOS versions).
+The data is stored in the form of tabulations in two txt-files, one for English and one for German. *Due to copyright reasons I am unfortunately not allowed to make these files publicly available, but I can provide a copy to interested researchers.*
+
+```{r}
+## English tabulation
+concordance_EO_upos<- read.delim("Concordances/tabulation_EO_UPOS.txt", quote = "")
+colnames(concordance_EO_upos) = c("NR", "Text_id", "item", "UPOS", "POS", "context")
+#View(concordance_EO_upos)
+
+## German tabulation
+concordance_GO_upos<- read.delim("Concordances/tabulation_GO_UPOS.txt", quote = "") # quote = "" added to avoid incorrect reading of the file
+colnames(concordance_GO_upos) = c("NR", "Text_id", "item", "UPOS", "POS", "context")
+#View(concordance_GO_upos)
+
+### the following commands are necessary to ensure that the German umlauts are rendered correctly
+### Note: in the view() display the characters are still displayed incorrectly, despite being rendered properly in the head() display
+for (i in c("item", "context")) {
+  Encoding(concordance_GO_upos[ ,i]) <- "UTF-8"
+}
+```
+
+Produce frequency overview of UPOS-tags in the corpus
+```{r}
+table_GO_abs = summary(as.factor(concordance_GO_upos$UPOS))
+table_GO_abs
+table_GO_rel = prop.table(table_GO_abs)
+table_GO_rel
+
+table_EO_abs = summary(as.factor(concordance_EO_upos$UPOS))
+table_EO_abs
+table_EO_rel = prop.table(table_EO_abs)
+table_EO_rel
+
+total = sum(table_EO_abs) + sum(table_GO_abs)
+total 
+## the total number of items returned by this does not match the number of words for the corpus given in the literature (e.g. on the GECCo Website: 1.4 million words). Potential reasons are:
+# - the UPOS-version of the corpus uses different tokenisation than other corpus versions 
+# - some texts (e.g. EO_SERMON_016) have been removed in the version available at the CQPweb that I work with
+```
+
+
+##2.3 POS data
+This data was arrived at by searching for [upos = ".*"] in the whole GECCo Corpus (UPOS versions).
+The data is stored in the form of tabulations in two txt-files, one for English and one for German. *Due to copyright reasons I am unfortunately not allowed to make these files publicly available, but I can provide a copy to interested researchers.*
+
+```{r}
+## English tabulation
+concordance_EO_pos<- read.delim("Concordances/tabulation_EO_UPOS.txt", quote = "")
+colnames(concordance_EO_pos) = c("NR", "Text_id", "item", "UPOS", "POS", "context")
+#View(concordance_EO_pos)
+
+## German tabulation
+concordance_GO_pos<- read.delim("Concordances/tabulation_GO_UPOS.txt", quote = "") # quote = "" added to avoid incorrect reading of the file
+colnames(concordance_GO_pos) = c("NR", "Text_id", "item", "UPOS", "POS", "context")
+#View(concordance_GO_pos)
+
+### the following commands are necessary to ensure that the German umlauts are rendered correctly
+### Note: in the view() display the characters are still displayed incorrectly, despite being rendered properly in the head() display
+for (i in c("item", "context")) {
+  Encoding(concordance_GO_pos[ ,i]) <- "UTF-8"
+}
+```
+
+
+Produce frequency overview of POS-tags in the corpus
+```{r}
+table_GO_pos_abs = summary(as.factor(concordance_GO_pos$POS))
+table_GO_pos_abs
+table_GO_pos_rel = prop.table(table_GO_pos_abs)
+table_GO_pos_rel
+
+table_EO_pos_abs = summary(as.factor(concordance_EO_pos$POS))
+table_EO_pos_abs
+table_EO_pos_rel = prop.table(table_EO_pos_abs)
+table_EO_pos_rel
+
+total = sum(table_EO_pos_abs) + sum(table_GO_pos_abs)
+total 
+## the total number of items returned by this does not match the number of words for the corpus given in the literature (e.g. on the GECCo Website: 1.4 million words). Potential reasons are:
+# - the UPOS-version of the corpus uses different tokenisation than other corpus versions 
+# - some texts (e.g. EO_SERMON_016) have been removed in the version available at the CQPweb that I work with
+```
+
+#3. Create random samples
+
+##3.1 Random samples for sentence-tagging
+```{r}
+## English 
+concordance_EO_s_sample = concordance_EO_s %>%
+  group_by(Text_id) %>%
+  slice_sample(n = 10)
+#View(concordance_EO_s_sample)
+## text with less than 10 sentences: EO_Sermon_001, EO_Sermon_002, EO_Sermon_004
+
+## German
+concordance_GO_s_sample = concordance_GO_s %>%
+  group_by(Text_id) %>%
+  slice_sample(n = 10)
+#View(concordance_GO_s_sample)
+## text with less than 10 sentences: GO_Academic_001, GO_Academic_005, GO_Academic_010
+
+## combine English & German
+s_sample_all = bind_rows(concordance_EO_s_sample, concordance_GO_s_sample)
+
+## write to file (This command does not need to be run, I already created and saved the file)
+#write_xlsx(s_sample_all, path = "Samples_for_quality_check/Sample_s.xlsx")
+```
+
+
+##3.2 Random samples for UPOS-tagging
+```{r}
+## English 
+concordance_EO_upos_sample = concordance_EO_upos %>%
+  group_by(Text_id) %>%
+  slice_sample(n = 10)
+#View(concordance_EO_upos_sample)
+
+## German
+concordance_GO_upos_sample = concordance_GO_upos %>%
+  group_by(Text_id) %>%
+  slice_sample(n = 10)
+#View(concordance_GO_upos_sample)
+
+## combine English & German
+upos_sample_all = bind_rows(concordance_EO_upos_sample, concordance_GO_upos_sample)
+summary(upos_sample_all)
+
+## write to file (This command does not need to be run, I already created and saved the file)
+#write_xlsx(upos_sample_all, path = "Samples_for_quality_check/Sample_UPOS.xlsx")
+```
+
+##3.3 Random sample for verbal UPOS-tags
+```{r}
+## for English
+v_sample_EO_1 = filter(concordance_EO_upos, UPOS == "VERB") %>%
+  slice_sample(n = 200)
+v_sample_EO_2 = filter(concordance_EO_upos, UPOS == "NOUN") %>%
+  slice_sample(n = 100)
+v_sample_EO_3 = filter(concordance_EO_upos, UPOS == "ADJ") %>%
+  slice_sample(n = 100)
+v_sample_EO_4 = filter(concordance_EO_upos, UPOS == "ADV") %>%
+  slice_sample(n = 100)
+v_sample_EO_5 = filter(concordance_EO_upos, UPOS == "AUX") %>%
+  slice_sample(n = 100)
+v_sample_EO = bind_rows(v_sample_EO_1, v_sample_EO_2, v_sample_EO_3, v_sample_EO_4, v_sample_EO_5)
+
+## for German
+v_sample_GO_1 = filter(concordance_GO_upos, UPOS == "VERB") %>%
+  slice_sample(n = 200)
+v_sample_GO_2 = filter(concordance_GO_upos, UPOS == "NOUN") %>%
+  slice_sample(n = 100)
+v_sample_GO_3 = filter(concordance_GO_upos, UPOS == "ADJ") %>%
+  slice_sample(n = 100)
+v_sample_GO_4 = filter(concordance_GO_upos, UPOS == "ADV") %>%
+  slice_sample(n = 100)
+v_sample_GO_5 = filter(concordance_GO_upos, UPOS == "AUX") %>%
+  slice_sample(n = 100)
+v_sample_GO = bind_rows(v_sample_GO_1, v_sample_GO_2, v_sample_GO_3, v_sample_GO_4, v_sample_GO_5)
+
+## combine and save samples
+v_sample = bind_rows(v_sample_EO, v_sample_GO)
+View(v_sample)
+# write to file (This command does not need to be run, I already created and saved the file)
+#write_xlsx(v_sample, path = "Samples_for_quality_check/Sample_VERB.xlsx")
+```
+
+
+##3.4 Random samples for POS-tagging
+```{r}
+## English 
+concordance_EO_pos_sample = concordance_EO_pos %>%
+  group_by(Text_id) %>%
+  slice_sample(n = 10)
+#View(concordance_EO_pos_sample)
+
+## German
+concordance_GO_pos_sample = concordance_GO_pos %>%
+  group_by(Text_id) %>%
+  slice_sample(n = 10)
+#View(concordance_GO_pos_sample)
+
+## combine English & German
+pos_sample_all = bind_rows(concordance_EO_pos_sample, concordance_GO_pos_sample)
+summary(pos_sample_all)
+
+## write to file (This command does not need to be run, I already created and saved the file)
+#write_xlsx(concordance_EO_pos_sample, path = "Samples_for_quality_check/Sample_POS_EO.xlsx")
+#write_xlsx(concordance_GO_pos_sample, path = "Samples_for_quality_check/Sample_POS_GO.xlsx")
+```
+
+
+#4. Analysis of accuracy
+
+##4.1 Accuracy of sentence-tagging
+
+###4.1.1 Accuracy for individual texts
+```{r}
+## read in file
+s_sample_checked = read_excel("Samples_for_quality_check/Sample_s_checked.xlsx")
+head(s_sample_checked)
+
+## extract accuracy ratings
+s_accuracy = s_sample_checked %>%
+  group_by(Text_id) %>%
+  count(correct)
+s_accuracy_tidy = pivot_wider(s_accuracy, names_from = correct, values_from = n) ## make data tidy
+s_accuracy_tidy = mutate(s_accuracy_tidy, n_checked = sum(no, yes, na.rm = TRUE)) ## add number of sentences that were checked (is sometimes smaller than 10)
+s_accuracy_tidy = mutate(s_accuracy_tidy, percentage_correct = yes/n_checked) ## calculate percentage
+s_accuracy_tidy["percentage_correct"][is.na(s_accuracy_tidy["percentage_correct"])] <- 0 ## correct percentages for columns where yes = 0 (and therefore percentage = NA)
+s_accuracy_tidy
+
+## add information on language, medium, and register for grouping
+s_accuracy_tidy = separate(s_accuracy_tidy, 
+                               col = "Text_id", into = c("language_code", "register", "Drop"), 
+                               sep = "_", remove = FALSE)
+s_accuracy_tidy$Language = ifelse(s_accuracy_tidy$language_code == "EO", "English", "German")
+s_accuracy_tidy$medium = ifelse(s_accuracy_tidy$register %in% 
+                              c("ACADEMIC", "INTERVIEW", "FORUM", "MEDCONSULT", "SERMON", "TALKSHOW"),
+                                  "spoken", "written")
+s_accuracy_tidy = select(s_accuracy_tidy, -"Drop", -"language_code")
+s_accuracy_tidy
+
+mean(s_accuracy_tidy$percentage_correct)
+
+## select problematic files
+s_problematic = filter(s_accuracy_tidy, percentage_correct < 0.8) %>%
+  arrange(percentage_correct)
+s_problematic
+```
+
+###4.1.2 Accuracy grouped by registers
+```{r}
+s_accuracy_register = s_accuracy_tidy %>%
+  group_by(register, Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+s_accuracy_register
+```
+
+###4.1.3 Accuracy grouped by medium
+```{r}
+s_accuracy_medium = s_accuracy_tidy %>%
+  group_by(medium, Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+s_accuracy_medium
+```
+
+
+###4.1.4 Accuracy grouped by language
+```{r}
+s_accuracy_language = s_accuracy_tidy %>%
+  group_by(Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+s_accuracy_language
+```
+
+
+
+##4.2 Accuracy of UPOS-tagging
+
+###4.2.1 Accuracy for individual texts
+```{r}
+### read in file
+upos_sample_checked = read_excel("Samples_for_quality_check/Sample_UPOS_checked.xlsx")
+head(upos_sample_checked)
+
+## extract accuracy ratings
+upos_accuracy = upos_sample_checked %>%
+  group_by(Text_id) %>%
+  count(correct)
+upos_accuracy_tidy = pivot_wider(upos_accuracy, names_from = correct, values_from = n) ## make data tidy
+upos_accuracy_tidy = mutate(upos_accuracy_tidy, percentage_correct = yes/10) ## calculate percentage
+upos_accuracy_tidy
+
+## add information on language, medium, and register
+upos_accuracy_tidy = separate(upos_accuracy_tidy, 
+                               col = "Text_id", into = c("language_code", "register", "Drop"), 
+                               sep = "_", remove = FALSE)
+upos_accuracy_tidy$Language = ifelse(upos_accuracy_tidy$language_code == "EO", "English", "German")
+upos_accuracy_tidy$medium = ifelse(upos_accuracy_tidy$register %in% 
+                              c("ACADEMIC", "INTERVIEW", "FORUM", "MEDCONSULT", "SERMON", "TALKSHOW"),
+                                  "spoken", "written")
+upos_accuracy_tidy = select(upos_accuracy_tidy, -"Drop", -"language_code")
+upos_accuracy_tidy
+
+mean(upos_accuracy_tidy$percentage_correct)
+
+## select problematic files
+upos_problematic = filter(upos_accuracy_tidy, percentage_correct < 0.8)
+upos_problematic
+```
+
+###4.2.2 Accuracy grouped by register
+```{r}
+upos_accuracy_register = upos_accuracy_tidy %>%
+  group_by(register, Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+upos_accuracy_register
+```
+
+
+###4.2.3 Accuracy grouped by medium
+```{r}
+upos_accuracy_medium = upos_accuracy_tidy %>%
+  group_by(medium, Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+upos_accuracy_medium
+```
+
+
+###4.2.4 Accuracy grouped by language
+```{r}
+upos_accuracy_language = upos_accuracy_tidy %>%
+  group_by(Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+upos_accuracy_language
+```
+
+##4.3 Accuracy of POS-tagging
+
+###4.3.1 Accuracy for individual texts
+```{r}
+### read in file
+pos_sample_EO_checked = read_excel("Samples_for_quality_check/Sample_POS_EO_checked.xlsx")
+pos_sample_GO_checked = read_excel("Samples_for_quality_check/Sample_POS_GO_checked.xlsx")
+pos_sample_checked = bind_rows(pos_sample_EO_checked, pos_sample_GO_checked)
+head(pos_sample_checked)
+
+## extract accuracy ratings for English
+pos_EO_accuracy = pos_sample_EO_checked %>%
+  group_by(Text_id) %>%
+  count(correct)
+pos_EO_accuracy_tidy = pivot_wider(pos_EO_accuracy, names_from = correct, values_from = n) ## make data tidy
+pos_EO_accuracy_tidy = mutate(pos_EO_accuracy_tidy, percentage_correct = yes/10) ## calculate percentage
+pos_EO_accuracy_tidy
+
+## add information on language, medium, and register
+pos_EO_accuracy_tidy = separate(pos_EO_accuracy_tidy, 
+                               col = "Text_id", into = c("language_code", "register", "Drop"), 
+                               sep = "_", remove = FALSE)
+pos_EO_accuracy_tidy$Language = ifelse(pos_EO_accuracy_tidy$language_code == "EO", "English", "German")
+pos_EO_accuracy_tidy$medium = ifelse(pos_EO_accuracy_tidy$register %in% 
+                              c("ACADEMIC", "INTERVIEW", "FORUM", "MEDCONSULT", "SERMON", "TALKSHOW"),
+                                  "spoken", "written")
+pos_EO_accuracy_tidy = select(pos_EO_accuracy_tidy, -"Drop", -"language_code")
+pos_EO_accuracy_tidy
+mean(pos_EO_accuracy_tidy$percentage_correct)
+
+## select problematic files
+pos_EO_problematic = filter(pos_EO_accuracy_tidy, percentage_correct < 0.8)
+pos_EO_problematic
+
+
+## extract accuracy ratings for German
+pos_GO_accuracy = pos_sample_GO_checked %>%
+  group_by(Text_id) %>%
+  count(correct)
+pos_GO_accuracy_tidy = pivot_wider(pos_GO_accuracy, names_from = correct, values_from = n) ## make data tidy
+pos_GO_accuracy_tidy = mutate(pos_GO_accuracy_tidy, percentage_correct = yes/10) ## calculate percentage
+pos_GO_accuracy_tidy
+
+## add information on language, medium, and register
+pos_GO_accuracy_tidy = separate(pos_GO_accuracy_tidy, 
+                               col = "Text_id", into = c("language_code", "register", "Drop"), 
+                               sep = "_", remove = FALSE)
+pos_GO_accuracy_tidy$Language = ifelse(pos_GO_accuracy_tidy$language_code == "EO", "English", "German")
+pos_GO_accuracy_tidy$medium = ifelse(pos_GO_accuracy_tidy$register %in% 
+                              c("ACADEMIC", "INTERVIEW", "FORUM", "MEDCONSULT", "SERMON", "TALKSHOW"),
+                                  "spoken", "written")
+pos_GO_accuracy_tidy = select(pos_GO_accuracy_tidy, -"Drop", -"language_code")
+pos_GO_accuracy_tidy
+mean(pos_GO_accuracy_tidy$percentage_correct)
+
+## select problematic files
+pos_GO_problematic = filter(pos_GO_accuracy_tidy, percentage_correct < 0.8)
+pos_GO_problematic
+
+
+#### combine English and German into one file
+pos_accuracy_tidy = bind_rows(pos_GO_accuracy_tidy, pos_EO_accuracy_tidy)
+summary(pos_accuracy_tidy)
+```
+
+###4.3.2 Accuracy grouped by register
+```{r}
+## English
+pos_EO_accuracy_register = pos_EO_accuracy_tidy %>%
+  group_by(register, Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+pos_EO_accuracy_register
+
+## German
+pos_GO_accuracy_register = pos_GO_accuracy_tidy %>%
+  group_by(register, Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+pos_GO_accuracy_register
+
+pos_accuracy_register = bind_rows(pos_GO_accuracy_register, pos_EO_accuracy_register)
+```
+
+###4.3.3 Accuracy grouped by medium
+```{r}
+## English
+pos_EO_accuracy_medium = pos_EO_accuracy_tidy %>%
+  group_by(medium, Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+pos_EO_accuracy_medium
+
+## German
+pos_GO_accuracy_medium = pos_GO_accuracy_tidy %>%
+  group_by(medium, Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+pos_GO_accuracy_medium
+
+pos_accuracy_medium = bind_rows(pos_GO_accuracy_medium, pos_EO_accuracy_medium)
+```
+
+###4.2.4 Accuracy grouped by language
+```{r}
+pos_accuracy_language = pos_accuracy_tidy %>%
+  group_by(Language) %>%
+  summarise(percentage_correct_av = mean(percentage_correct, na.rm = TRUE)) %>%
+  arrange(percentage_correct_av)
+pos_accuracy_language
+```
+
+
+#5. Visualisation
+To ease comparison I have set the same x-axis labels for all the graphs and used the same colour-coding.
+
+##5.1 Accuracy of sentence tagging
+
+###5.1.1. Text-level
+```{r}
+s_accuracy_tidy$Text_id = with(s_accuracy_tidy, reorder(Text_id, percentage_correct))
+
+ggplot(arrange(s_accuracy_tidy, percentage_correct)) +
+  geom_density(mapping = aes(x = percentage_correct)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2)
+
+ggplot(arrange(s_accuracy_tidy, percentage_correct)) + 
+  geom_jitter(mapping = aes(x= Text_id, y = percentage_correct, fill = Language)) +
+  geom_hline(aes(yintercept = 0.8), color = "blue") +
+  labs(y = "Percentage correctly tagged sentences", x = "Text_id", title = "Accuracy of sentence-tagging for individual texts", subtitle = "Based on a random sample of 10 sentences for each text")
+```
+
+###5.1.2 Register-level
+```{r}
+s_accuracy_register$register = with(s_accuracy_register, reorder(register, percentage_correct_av))
+
+ggplot(arrange(s_accuracy_register, percentage_correct_av)) + 
+  geom_point(mapping = aes(y = register, x = percentage_correct_av, fill = Language, color = Language)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2) +
+  xlim(0,1) +
+  labs(y = "Register", x = "Average percentage of correctly tagged sentences", title = "Accuracy of sentence-tagging by register", subtitle = "Based on a random sample of 10 sentences for each text in each register")
+```
+
+###5.1.3 Medium-level
+```{r}
+s_accuracy_medium$medium = with(s_accuracy_medium, reorder(medium, percentage_correct_av))
+
+ggplot(arrange(s_accuracy_medium, percentage_correct_av)) + 
+  geom_point(mapping = aes(y = medium, x = percentage_correct_av, fill = Language, color = Language)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2) +
+  xlim(0,1) +
+  labs(y = "Medium", x = "Average percentage of correctly tagged sentences", title = "Accuracy of sentence-tagging by medium", subtitle = "Based on a random sample of 10 sentences for each text in each register")
+```
+
+###5.1.4 Language-level
+```{r}
+s_accuracy_language$Language = with(s_accuracy_language, reorder(Language, percentage_correct_av))
+
+ggplot(arrange(s_accuracy_language, percentage_correct_av)) + 
+  geom_point(mapping = aes(y = Language, x = percentage_correct_av, fill = Language, color = Language)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2) +
+  xlim(0,1) +
+  labs(y = "Language", x = "Average percentage of correctly tagged sentences", title = "Accuracy of sentence-tagging by Language", subtitle = "Based on a random sample of 10 sentences for each text in each register")
+```
+
+
+## 5.2 Accuracy of UPOS tagging
+
+###5.2.1 Text-level
+```{r}
+upos_accuracy_tidy$Text_id = with(upos_accuracy_tidy, reorder(Text_id, percentage_correct))
+
+ggplot(arrange(upos_accuracy_tidy, percentage_correct)) +
+  geom_density(mapping = aes(x = percentage_correct)) +
+  xlim(0,1) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2)
+
+ggplot(arrange(upos_accuracy_tidy, percentage_correct)) + 
+  geom_jitter(mapping = aes(x= Text_id, y = percentage_correct, fill = Language)) +
+  geom_hline(aes(yintercept = 0.8), color = "blue") +
+  labs(y = "Percentage correct UPOS tags", x = "Text_id", title = "Accuracy of UPOS-tagging for individual texts", subtitle = "Based on a random sample of 10 sentences for each text")
+```
+
+###5.2.2 Register-level
+
+```{r}
+upos_accuracy_register
+
+upos_accuracy_register$register = with(upos_accuracy_register, reorder(register, percentage_correct_av))
+
+ggplot(arrange(upos_accuracy_register, percentage_correct_av)) + 
+  geom_point(mapping = aes(y = register, x = percentage_correct_av, fill = Language, color = Language)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2) +
+  xlim(0,1) +
+  labs(y = "Register", x = "Average percentage of correct UPOS-tags", title = "Accuracy of UPOS-tagging by register", subtitle = "Based on a random sample of 10 tags for each text in each register (total: 3720 tags)")
+```
+
+###5.2.3 Medium-level
+
+```{r}
+upos_accuracy_medium$medium = with(upos_accuracy_medium, reorder(medium, percentage_correct_av))
+
+ggplot(arrange(upos_accuracy_medium, percentage_correct_av)) + 
+  geom_point(mapping = aes(y = medium, x = percentage_correct_av, fill = Language, color = Language)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2) +
+  xlim(0,1) +
+  labs(y = "Medium", x = "Average percentage of correct UPOS-tags", title = "Accuracy of UPOS-tagging by medium", subtitle = "Based on a random sample of 10 tags for each text in each register")
+```
+
+###5.2.4 Language-level
+
+```{r}
+upos_accuracy_language$Language = with(upos_accuracy_language, reorder(Language, percentage_correct_av))
+
+ggplot(arrange(upos_accuracy_language, percentage_correct_av)) + 
+  geom_point(mapping = aes(y = Language, x = percentage_correct_av, fill = Language, color = Language)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2) +
+  xlim(0,1) +
+  labs(y = "Language", x = "Average percentage of correct UPOS-tags", title = "Accuracy of UPOS-tagging by Language", subtitle = "Based on a random sample of 10 tags for each text in each register")
+```
+
+
+##5.3 Accuracy of POS-tagging
+
+###5.3.1 Text-level
+
+```{r}
+pos_accuracy_tidy$Text_id = with(pos_accuracy_tidy, reorder(Text_id, percentage_correct))
+
+ggplot(arrange(pos_accuracy_tidy, percentage_correct)) +
+  geom_density(mapping = aes(x = percentage_correct)) +
+  xlim(0,1) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2)
+
+ggplot(arrange(pos_accuracy_tidy, percentage_correct)) + 
+  geom_jitter(mapping = aes(x= Text_id, y = percentage_correct, fill = Language)) +
+  geom_hline(aes(yintercept = 0.8), color = "blue") +
+  labs(y = "Percentage correct POS tags", x = "Text_id", title = "Accuracy of POS-tagging for individual texts", subtitle = "Based on a random sample of 10 sentences for each text")
+```
+
+###5.3.2 Register-level
+
+```{r}
+pos_accuracy_register$register = with(pos_accuracy_register, reorder(register, percentage_correct_av))
+
+ggplot(arrange(pos_accuracy_register, percentage_correct_av)) + 
+  geom_point(mapping = aes(y = register, x = percentage_correct_av, fill = Language, color = Language)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2) +
+  xlim(0,1) +
+  labs(y = "Register", x = "Average percentage of correct POS-tags", title = "Accuracy of POS-tagging by register", subtitle = "Based on a random sample of 10 tags for each text in each register (total: 3720 tags)")
+```
+
+###5.3.3 Medium-level
+
+```{r}
+pos_accuracy_medium$medium = with(pos_accuracy_medium, reorder(medium, percentage_correct_av))
+
+ggplot(arrange(pos_accuracy_medium, percentage_correct_av)) + 
+  geom_point(mapping = aes(y = medium, x = percentage_correct_av, fill = Language, color = Language)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2) +
+  xlim(0,1) +
+  labs(y = "Medium", x = "Average percentage of correct POS-tags", title = "Accuracy of POS-tagging by medium", subtitle = "Based on a random sample of 10 tags for each text in each register")
+```
+
+###5.2.4 Language-level
+
+```{r}
+pos_accuracy_language$Language = with(pos_accuracy_language, reorder(Language, percentage_correct_av))
+
+ggplot(arrange(pos_accuracy_language, percentage_correct_av)) + 
+  geom_point(mapping = aes(y = Language, x = percentage_correct_av, fill = Language, color = Language)) +
+  geom_vline(aes(xintercept = 0.8), color = "darkgrey", linetype = 2) +
+  xlim(0,1) +
+  labs(y = "Language", x = "Average percentage of correct POS-tags", title = "Accuracy of POS-tagging by Language", subtitle = "Based on a random sample of 10 tags for each text in each register")
+```
+
+
+#6. Writing accuracy measurements to file
+
+Combining all measurements for each text into one data frame
+```{r}
+head(s_accuracy_tidy, n = 20)
+head(upos_accuracy_tidy, n = 20)
+head(pos_accuracy_tidy)
+
+accuracy_all <- s_accuracy_tidy %>%
+  select(Text_id, register, percentage_correct, Language, medium) %>%
+  rename(accuracy_s = percentage_correct) %>%
+  add_column(accuracy_upos = upos_accuracy_tidy$percentage_correct) %>%
+  add_column(accuracy_pos = pos_accuracy_tidy$percentage_correct) %>%
+  select(Text_id, Language, register, medium, accuracy_s, accuracy_upos, accuracy_pos)
+
+head(accuracy_all)
+```
+
+
+Writing that data frame to a new Excel-Sheet
+```{r}
+## it is not necessary to run this command, I already created and saved the file.
+write_xlsx(accuracy_all, path = "Overview_accuracy.xlsx")
+```
+
+
+
+

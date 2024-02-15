@@ -1,0 +1,204 @@
+---
+title: "Cluster_analysis"
+author: "Hanna Mahler"
+date: "2023-05-08"
+output: html_document
+---
+
+This script produces a cluster analysis of all texts in the GECCo corpus. For this script to run, we need the file "Overview_texts_vp.xlsx", which is produced by the "GECCo_Verbs" script.
+
+The code in this script stems in parts from Boehmke & Greenwell (2019), Levshina (2015), and also from the R graph gallery (2018).
+
+#1. Load libraries
+
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(cluster)     # for general clustering algorithms
+library(factoextra)  # for visualizing cluster results
+library(readxl)
+library(dendextend)
+options(scipen = 999) # this turns off the scientific notation of very high/low numbers (e-10)
+set.seed(42)
+```
+
+#2. Load data
+
+Let's load and inspect the pre-processed, tidy data.
+
+```{r load df texts}
+texts <- read_excel("Overview_texts_vp.xlsx") %>%
+  mutate(Language = as.factor(Language),
+         Register = as.factor(Register), 
+         Mode = as.factor(Mode)) %>%
+  select(Text_id, Register, Language, vp_phw, vp_f_phw, vp_nf_phw) ## we only need those columns that are relevant for the clustering
+
+texts_numonly <- texts[, 5:6]
+rownames(texts_numonly) <- texts$Text_id
+```
+
+```{r load df registers}
+registers <- read_excel("Overview_registers_vp.xlsx") %>%
+  mutate(Language = as.factor(Language),
+         Register = as.factor(Register), 
+         Mode = as.factor(Mode)) %>%
+  select(Register, Language, Mode, vp_phw_av, vp_f_phw_av, vp_nf_phw_av, RegisterID) ## we only need those columns that are relevant for the clustering
+
+registers_numonly <- registers[, 5:6]
+rownames(registers_numonly) <- registers$RegisterID
+rownames(registers) <- registers$RegisterID ## needed for point plot below
+```
+
+
+#3. Perform Clustering: hierarchical clustering
+
+##3.1 Create cluster solutions
+
+We will implement divisive clustering (instead of agglomerative clustering), using the diana() function from the "cluster" package.
+
+We will cluster the data points based on the frequency of finite and non-finite verb phrases phw.
+We will implement the clustering on the level of individual texts and on the level of registers.
+
+Most textbooks convert their data frames into a distance matrix manually (e.g. Baayen 2008: 150-152, Levshina 2015: 306, Johnson 2008: 191), but since the diana() function can also take raw data frames as input, I will not do so.
+In contrast to other clustering functions, for diana() we do NOT need to specify an agglomeration method! (Boehmke & Greenwell 2019: chp. 21.3.2)
+
+As input for diana() we need a data frame with numerical variables only and the data point identifiers as rownames. Otherwise the identifiers won't show up in the plot later on.
+ 
+```{r apply DIANA}
+## cluster based on frequency of finite and non-finite vps phw, text level
+Diana_texts_vpfnf <- diana(texts_numonly, # We subset the numerical columns only.
+                           metric = "euclidean", # specify distance metric for calculating the distance matrix
+                           diss = FALSE) # specify that the input object is not already a dissimilarity matrix
+
+## cluster based on frequency of finite and non-finite vps phw, register level
+Diana_registers_vpfnf <- diana(registers_numonly, # We subset the numerical columns only.
+                               metric = "euclidean", # specify distance metric for calculating the distance matrix
+                               diss = FALSE, # specify that the input object is not already a dissimilarity matrix
+                               keep.data = TRUE, keep.diss = TRUE) 
+```
+
+##3.2. Comparing solutions
+We evaluate the cluster solutions based on their agglomerative/divisive coefficients. This coefficient ranges from 0 to 1. The ideal value is close to 1, it means that the clustering solution is more "dense". Since the coefficient depends on sample size it should not be compared across the data set for texts and the data set for registers (Boehmke & Greenwell 2019: chp.21.3.1).
+
+Result: both values are good (above 0.9).
+
+```{r get DC value}
+Diana_texts_vpfnf$dc
+Diana_registers_vpfnf$dc
+```
+
+##3.3 Find out the optimal number of clusters
+
+Code taken from Levshina (2015: 311-312).
+
+Inspecting the silhouette width of the different clusters reveals:
+- registers: the highest silhouette width is at k = 6. This suggests that 6 clusters lead to ideal cluster density. But a solution with 5 and 2 clusters is also very close.
+- texts: the highest silhouette width is at k = 2. This suggests that 2 clusters lead to ideal cluster density.
+
+```{r text cluster}
+test.clust2 <- cutree(Diana_texts_vpfnf, k = 2) 
+test.clust2
+summary(silhouette(test.clust2, dist(texts_numonly)))$avg.width 
+
+test.clust3 <- cutree(Diana_texts_vpfnf, k = 3) 
+test.clust3
+summary(silhouette(test.clust3, dist(texts_numonly)))$avg.width 
+
+test.clust4 <- cutree(Diana_texts_vpfnf, k = 4)
+test.clust4
+summary(silhouette(test.clust4, dist(texts_numonly)))$avg.width 
+
+test.clust5 <- cutree(Diana_texts_vpfnf, k = 5) 
+test.clust5
+summary(silhouette(test.clust5, dist(texts_numonly)))$avg.width 
+
+test.clust6 <- cutree(Diana_texts_vpfnf, k = 6)
+test.clust6
+summary(silhouette(test.clust6, dist(texts_numonly)))$avg.width
+
+test.clust7 <- cutree(Diana_texts_vpfnf, k = 7)
+test.clust7
+summary(silhouette(test.clust7, dist(texts_numonly)))$avg.width 
+
+test.clust8 <- cutree(Diana_texts_vpfnf, k = 8)
+test.clust8
+summary(silhouette(test.clust8, dist(texts_numonly)))$avg.width 
+
+test.clust9 <- cutree(Diana_texts_vpfnf, k = 9)
+test.clust9
+summary(silhouette(test.clust9, dist(texts_numonly)))$avg.width 
+
+test.clust10 <- cutree(Diana_texts_vpfnf, k = 10)
+test.clust10
+summary(silhouette(test.clust10, dist(texts_numonly)))$avg.width 
+
+test.clust11 <- cutree(Diana_texts_vpfnf, k = 11)
+test.clust11
+summary(silhouette(test.clust11, dist(texts_numonly)))$avg.width 
+
+test.clust12 <- cutree(Diana_texts_vpfnf, k = 12)
+test.clust12
+summary(silhouette(test.clust12, dist(texts_numonly)))$avg.width 
+```
+
+```{r register cluster}
+test.clust2 <- cutree(Diana_registers_vpfnf, k = 2)
+test.clust2
+summary(silhouette(test.clust2, dist(registers_numonly)))$avg.width 
+
+test.clust3 <- cutree(Diana_registers_vpfnf, k = 3)
+test.clust3
+summary(silhouette(test.clust3, dist(registers_numonly)))$avg.width 
+
+test.clust4 <- cutree(Diana_registers_vpfnf, k = 4)
+test.clust4
+summary(silhouette(test.clust4, dist(registers_numonly)))$avg.width 
+
+test.clust5 <- cutree(Diana_registers_vpfnf, k = 5)
+test.clust5
+summary(silhouette(test.clust5, dist(registers_numonly)))$avg.width 
+
+test.clust6 <- cutree(Diana_registers_vpfnf, k = 6)
+test.clust6
+summary(silhouette(test.clust6, dist(registers_numonly)))$avg.width
+
+test.clust7 <- cutree(Diana_registers_vpfnf, k = 7)
+test.clust7
+summary(silhouette(test.clust7, dist(registers_numonly)))$avg.width 
+```
+
+
+#5. Visualisations
+
+##5.1 Point plots
+
+Map vp_f_phw and vp_nf_phw values for each text.
+ 
+```{r}
+ggplot(data = registers, mapping = aes(x = vp_f_phw_av, y = vp_nf_phw_av)) +
+  geom_point(aes(colour = Language)) + 
+  geom_text(aes(label = rownames(registers)), size = 2.5, vjust = -1) + 
+  labs(x = "Average frequency of finite verb phrases phw", y = "Average frequency of non-finite verb phrases phw", title = "Frequency of finite and non-finite verb phrases in GECCo registers by language") 
+```
+
+
+##5.2 Dendrograms
+
+```{r basic dendrogram texts}
+fviz_dend(Diana_texts_vpfnf,
+          k = 6, 
+          horiz = TRUE,
+          cex = 0.5,
+          rect = TRUE, 
+          rect_fill = TRUE)
+```
+
+```{r basic dendrogram registers}
+fviz_dend(Diana_registers_vpfnf,
+          k = 6, 
+          horiz = TRUE,
+          cex = 0.5,
+          rect = TRUE, 
+          rect_fill = TRUE)
+```
+
+

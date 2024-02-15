@@ -1,0 +1,1652 @@
+---
+title: "GECCo_Verbs"
+author: "Hanna Mahler"
+date: "16 8 2021"
+output: html_document
+---
+
+This script calculates the frequency of finite and non-finite verb phrases per text and per register, as well as the frequency of sub-types of non-finite phrases. These frequencies are written to file at the end, this file can then be used for plotting and statistical analysis. 
+Before this script can be run, the two scripts "GECCo_Metainfo" and "GECCo_Preannotation" need to be run to produce the pre-annotated tables with verb phrases. In addition, these pre-annotated files need to be manually checked before reading them in here.
+
+#1. Preparations
+
+##1.1 Load libraries
+
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(readxl)
+library(stringr)
+library(writexl)
+options(scipen = 999)
+```
+
+
+##1.2. Load data
+
+###1.2.1 Read in txt-files
+
+First, load existing tables produced by the previous script "GECCo_Metainfo". 
+
+This file contains meta-info on each text in the corpus, such as the number of tokens and the type-token-ratio.
+We add a new "helper" column with unique register-IDs for English and German.
+
+```{r texts}
+## load existing table with meta-info on texts
+texts_meta = read_excel("Overview_texts.xlsx") 
+## create sub-groups
+texts_meta_EO = filter(texts_meta, Language == "English")
+texts_meta_GO = filter(texts_meta, Language == "German")
+
+## add dummy column for register analysis
+texts_meta_EO = texts_meta_EO %>%
+  mutate(RegisterID = str_c(Register, "_eng"))
+texts_meta_GO = texts_meta_GO %>%
+  mutate(RegisterID = str_c(Register, "_ger"))
+
+texts_meta = bind_rows(texts_meta_EO, texts_meta_GO)
+head(texts_meta, n = 30)
+```
+
+This file contains meta-info on each register in the corpus, such as the number of tokens and the average type-token-ratio.
+
+```{r registers}
+## load existing table with meta-info on registers
+registers_meta = read_excel("Overview_registers.xlsx")
+## create sub-groups
+registers_meta_EO = filter(registers_meta, Language == "English")
+registers_meta_GO = filter(registers_meta, Language == "German")
+
+## add dummy column for register analysis
+registers_meta_EO = registers_meta_EO %>%
+  mutate(RegisterID = str_c(Register, "_eng"))
+registers_meta_GO = registers_meta_GO %>%
+  mutate(RegisterID = str_c(Register, "_ger"))
+
+registers_meta = bind_rows(registers_meta_EO, registers_meta_GO)
+head(registers_meta, n = 30)
+```
+
+Then, load in pre-annotated files with verb phrases. These files contain one verb per row, the columns contain further information on each verb, such as finiteness and verb form. *Due to copyright reasons I had to reduce the columns "context_before" and "context_after" from 5 tokens to 1 token only.*
+
+```{r verbs}
+vp_EO = read_excel("vp_EO_messy_checked.xlsx")
+vp_GO = read_excel("vp_GO_messy_checked.xlsx")
+
+## change name from "complement" to "nominal" and from "modifying" to "embedded" in all data frames using gsub(pattern, replace, x)
+vp_EO$clause_type = gsub("complement", "nominal", vp_EO$clause_type)
+vp_GO$clause_type = gsub("complement", "nominal", vp_GO$clause_type)
+vp_EO$clause_type = gsub("modifying", "embedded", vp_EO$clause_type)
+vp_GO$clause_type = gsub("modifying", "embedded", vp_GO$clause_type)
+
+
+## for the analysis by register we need to create a dummy-column with unique register names for English and German
+vp_EO = vp_EO %>%
+  mutate(RegisterID = str_c(register, "_eng"))
+vp_GO = vp_GO %>%
+  mutate(RegisterID = str_c(register, "_ger"))
+
+## combine into one data frame
+verbs = bind_rows(vp_EO, vp_GO) %>% 
+  filter(type == "main")
+#head(verbs)
+```
+
+###1.2.2 Create subgroups
+
+For the further processing we now create sub-groups of finite and non-finite main verbs in each language. 
+
+```{r English & German}
+# data frame containing all verb phrases marked as "finite"
+verbs_f = filter(verbs, finiteness == "finite", type == "main")
+# data frame containing all verb phrases marked as "non-finite"
+verbs_nf = filter(verbs, finiteness == "non-finite", type == "main")
+
+# data frame containing all English/German verb phrases
+verbs_EO = filter(vp_EO, type == "main")
+verbs_GO = filter(vp_GO, type == "main")
+# data frame containing all English/German verb phrases marked as "non-finite"
+verbs_nf_EO = filter(vp_EO, finiteness == "non-finite", type == "main")
+verbs_nf_GO = filter(vp_GO, finiteness == "non-finite", type == "main")
+# data frame containing all English verb phrases marked as "finite"
+verbs_f_EO = filter(vp_EO, finiteness == "finite", type == "main")
+verbs_f_GO = filter(vp_GO, finiteness == "finite", type == "main")
+```
+
+
+#2. Adding frequency information to existing data frame on text-level
+
+We can do this for all texts (English and German) at the same time, since the joining works via the "Text_id" column, which only has unique values. 
+
+##2.1 Calculate and add frequency information for all verb phrases
+
+For each text we add the absolute and relative frequency of all verb phrases. I am computing three different relative frequencies: per hundred words, per million words, and per sentence. These can then be flexibly used for plotting and interpretation later on.
+For the relative frequencies I am using the number of tokens in each text as a baseline (see mutate() function below). 
+
+```{r both}
+vp_count = verbs %>% ## "verbs" contains only main verbs
+  group_by(Text_id) %>%
+  count()
+colnames(vp_count) = c("Text_id", "NR_vp")
+head(vp_count)
+
+## combine count of verb phrases for each text with existing table on texts
+texts_all = left_join(texts_meta, vp_count, by = "Text_id")
+summary(texts_all$NR_vp)
+
+# add measurement: verb phrases per million words
+texts_all = mutate(texts_all, vp_pmw = (NR_vp/NR_tokens)*1000000)
+# add measurement: verb phrases per hundred words
+texts_all = mutate(texts_all, vp_phw = (NR_vp/NR_tokens)*100)
+# add measurement: verb phrases per sentence
+texts_all = mutate(texts_all, vp_ps = NR_vp/NR_sentences)
+```
+
+##2.2 Calculate and add frequency information for finite verb phrases
+
+```{r both}
+verbs_f_count = verbs_f %>% ## this data frame contains finite main verbs only
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_f_count) = c("Text_id", "NR_vp_f")
+head(verbs_f_count)
+
+## combine count of finite verb phrases for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_f_count, by = "Text_id")
+summary(texts_all$NR_vp_f)
+
+# add measurement: finite verb phrases per million words
+texts_all = mutate(texts_all, vp_f_pmw = (NR_vp_f/NR_tokens)*1000000)
+# add measurement: finite verb phrases per hundred words
+texts_all = mutate(texts_all, vp_f_phw = (NR_vp_f/NR_tokens)*100)
+# add measurement: finite verb phrases per sentence
+texts_all = mutate(texts_all, vp_f_ps = NR_vp_f/NR_sentences)
+# add percentage of all verb phrases in that text that are finite
+texts_all = mutate(texts_all, vp_perc = NR_vp_f/NR_vp)
+```
+
+##2.3 Calculate and add frequency information for non-finite verb phrases
+
+```{r both}
+verbs_nf_count = verbs_nf %>% ## this data frame contains non-finite main verbs only
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_count) = c("Text_id", "NR_vp_nf")
+head(verbs_nf_count)
+
+## combine count of verb phrases for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_count, by = "Text_id")
+summary(texts_all$NR_vp_nf)
+
+## Some of the texts will now have NA as number of non-finite VPs as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 24])) { # 24 indicates the 24th column, which is NR_vp_nf
+  texts_all[n, 24] <- 0 }
+}
+
+# add measurement: non-finite verb phrases per million words
+texts_all = mutate(texts_all, vp_nf_pmw = (NR_vp_nf/NR_tokens)*1000000)
+# add measurement: non-finite verb phrases per hundred words
+texts_all = mutate(texts_all, vp_nf_phw = (NR_vp_nf/NR_tokens)*100)
+# add measurement: verb phrases per sentence
+texts_all = mutate(texts_all, vp_nf_ps = NR_vp_nf/NR_sentences)
+# add percentage of all verb phrases in that text that are non-finite
+texts_all = mutate(texts_all, vp_nf_perc = NR_vp_nf/NR_vp)
+```
+
+##2.4 Calculate and add frequency information for individual verb forms
+
+```{r bare infinitives}
+verbs_nf_infbare_count = verbs_nf %>%
+  filter(verb_form == "infinitive_bare") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_infbare_count) = c("Text_id", "NR_infbare")
+head(verbs_nf_infbare_count)
+
+## combine count of non-finite verb forms for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_infbare_count, by = "Text_id")
+summary(texts_all$NR_infbare)
+
+## Some of the texts might now have NA as number of bare infinitives as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 29])) { # 29 indicated the 29th column, which is NR_infbare
+  texts_all[n, 29] <- 0 }
+}
+
+# add measurement: bare infinitives per million words
+texts_all = mutate(texts_all, infbare_pmw = (NR_infbare/NR_tokens)*1000000)
+# add measurement: bare infinitives per hundred words
+texts_all = mutate(texts_all, infbare_phw = (NR_infbare/NR_tokens)*100)
+# add measurement: bare infinitives per sentence
+texts_all = mutate(texts_all, infbare_ps = NR_infbare/NR_sentences)
+# add percentage of all non-finite verb phrases in that text that are bare infinitives
+texts_all = mutate(texts_all, infbare_perc = NR_infbare/NR_vp_nf)
+```
+
+```{r to-infinitives}
+verbs_nf_infto_count = verbs_nf %>%
+  filter(verb_form == "infinitive_to") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_infto_count) = c("Text_id", "NR_infto")
+head(verbs_nf_infto_count)
+
+## combine count of to-infinitives for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_infto_count, by = "Text_id")
+summary(texts_all$NR_infto)
+
+## Some of the texts might now have NA as number of to-infinitives as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 34])) { # 34 indicated the 34rd column, which is NR_infto
+  texts_all[n, 34] <- 0 }
+}
+
+# add measurement: to-infinitives per million words
+texts_all = mutate(texts_all, infto_pmw = (NR_infto/NR_tokens)*1000000)
+# add measurement: to-infinitives per hundred words
+texts_all = mutate(texts_all, infto_phw = (NR_infto/NR_tokens)*100)
+# add measurement: to-infinitives per sentence
+texts_all = mutate(texts_all, infto_ps = NR_infto/NR_sentences)
+# add percentage of all non-finite verb phrases in that text that are to-infinitives
+texts_all = mutate(texts_all, infto_perc = NR_infto/NR_vp_nf)
+```
+
+```{r past participles}
+verbs_nf_parpas_count = verbs_nf %>%
+  filter(verb_form == "participle_past") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_parpas_count) = c("Text_id", "NR_parpas")
+head(verbs_nf_parpas_count)
+
+## combine count of past participles for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_parpas_count, by = "Text_id")
+summary(texts_all$NR_parpas)
+
+## Some of the texts might now have NA as number of past participles as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 39])) { # 39 indicated the 39th column, which is NR_parpas
+  texts_all[n, 39] <- 0 }
+}
+
+# add measurement: past participles per million words
+texts_all = mutate(texts_all, parpas_pmw = (NR_parpas/NR_tokens)*1000000)
+# add measurement: past participles per hundred words
+texts_all = mutate(texts_all, parpas_phw = (NR_parpas/NR_tokens)*100)
+# add measurement: past participles per sentence
+texts_all = mutate(texts_all, parpas_ps = NR_parpas/NR_sentences)
+# add percentage of all non-finite verb phrases in that text that are past participles
+texts_all = mutate(texts_all, parpas_perc = NR_parpas/NR_vp_nf)
+```
+
+```{r present participles}
+verbs_nf_parpre_count = verbs_nf %>%
+  filter(verb_form == "participle_present") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_parpre_count) = c("Text_id", "NR_parpre")
+head(verbs_nf_parpre_count)
+
+## combine count of present participles for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_parpre_count, by = "Text_id")
+summary(texts_all$NR_parpre)
+
+## Some of the texts might now have NA as number of present participles as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 44])) { # 44 indicated the 44th column, which is NR_parpre
+  texts_all[n, 44] <- 0 }
+}
+
+# add measurement: present participles per million words
+texts_all = mutate(texts_all, parpre_pmw = (NR_parpre/NR_tokens)*1000000)
+# add measurement: present participles per hundred words
+texts_all = mutate(texts_all, parpre_phw = (NR_parpre/NR_tokens)*100)
+# add measurement: present participles per sentence
+texts_all = mutate(texts_all, parpre_ps = NR_parpre/NR_sentences)
+# add percentage of all non-finite verb phrases in that text that are present participles
+texts_all = mutate(texts_all, parpre_perc = NR_parpre/NR_vp_nf)
+```
+
+##2.5 Calculate and add frequency information for types of dependent clauses
+
+```{r adverbial clauses}
+verbs_nf_adv_count = verbs_nf %>%
+  filter(clause_type == "adverbial") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_adv_count) = c("Text_id", "NR_adv")
+head(verbs_nf_adv_count)
+
+## combine count of non-finite verb phrases forming adverbial clauses for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_adv_count, by = "Text_id")
+summary(texts_all$NR_adv)
+
+## Some of the texts might now have NA as number of non-finite verb phrases forming adverbial clauses as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 49])) { # 49 indicates the 49th column, which is NR_adv
+  texts_all[n, 49] <- 0 }
+}
+
+# add measurement: adverbials per million words
+texts_all = mutate(texts_all, adv_pmw = (NR_adv/NR_tokens)*1000000)
+# add measurement: adverbials per hundred words
+texts_all = mutate(texts_all, adv_phw = (NR_adv/NR_tokens)*100)
+# add measurement: adverbials per sentence
+texts_all = mutate(texts_all, adv_ps = NR_adv/NR_sentences)
+# add percentage of all non-finite verb phrases in that text that are adverbial clauses
+texts_all = mutate(texts_all, adv_perc = NR_adv/NR_vp_nf)
+```
+
+```{r nominal clauses}
+verbs_nf_nom_count = verbs_nf %>%
+  filter(clause_type == "nominal") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_nom_count) = c("Text_id", "NR_nom")
+head(verbs_nf_nom_count)
+
+## combine count of non-finite verb phrases forming nominal clauses for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_nom_count, by = "Text_id")
+summary(texts_all$NR_nom)
+
+## Some of the texts might now have NA as number of non-finite verb phrases forming nominal clauses as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 54])) { # 54 indicates the 54thd column, which is NR_nom
+  texts_all[n, 54] <- 0 }
+}
+
+# add measurement: nominals per million words
+texts_all = mutate(texts_all, nom_pmw = (NR_nom/NR_tokens)*1000000)
+# add measurement: nominals per hundred words
+texts_all = mutate(texts_all, nom_phw = (NR_nom/NR_tokens)*100)
+# add measurement: nominals per sentence
+texts_all = mutate(texts_all, nom_ps = NR_nom/NR_sentences)
+# add percentage of all non-finite verb phrases in that text that are nominal clauses
+texts_all = mutate(texts_all, nom_perc = NR_nom/NR_vp_nf)
+```
+
+```{r embedded clauses}
+verbs_nf_emb_count = verbs_nf %>%
+  filter(clause_type == "embedded") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_emb_count) = c("Text_id", "NR_emb")
+head(verbs_nf_emb_count)
+
+## combine count of non-finite verb phrases forming embedded clauses for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_emb_count, by = "Text_id")
+summary(texts_all$NR_emb)
+
+## Some of the texts might now have NA as number of non-finite verb phrases forming embedded clauses as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 59])) { # 59 indicates the 59th column, which is NR_emb
+  texts_all[n, 59] <- 0 }
+}
+
+# add measurement: embedded clauses per million words
+texts_all = mutate(texts_all, emb_pmw = (NR_emb/NR_tokens)*1000000)
+# add measurement: embedded clauses per hundred words
+texts_all = mutate(texts_all, emb_phw = (NR_emb/NR_tokens)*100)
+# add measurement: embedded clauses per sentence
+texts_all = mutate(texts_all, emb_ps = NR_emb/NR_sentences)
+# add percentage of all non-finite verb phrases in that text that are embedded clauses
+texts_all = mutate(texts_all, emb_perc = NR_emb/NR_vp_nf)
+```
+
+```{r independent clauses}
+verbs_nf_ind_count = verbs_nf %>%
+  filter(clause_type == "independent") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_ind_count) = c("Text_id", "NR_ind")
+head(verbs_nf_ind_count)
+
+## combine count of non-finite verb phrases forming independent clauses for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_ind_count, by = "Text_id")
+summary(texts_all$NR_ind)
+
+## Some of the texts might now have NA as number of non-finite verb phrases forming independent clauses as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 64])) { # 64 indicates the 64th column, which is NR_ind
+  texts_all[n, 64] <- 0 }
+}
+
+# add measurement: independent clauses per million words
+texts_all = mutate(texts_all, ind_pmw = (NR_ind/NR_tokens)*1000000)
+# add measurement: independent clauses per hundred words
+texts_all = mutate(texts_all, ind_phw = (NR_ind/NR_tokens)*100)
+# add measurement: independent clauses per sentence
+texts_all = mutate(texts_all, ind_ps = NR_ind/NR_sentences)
+# add percentage of all non-finite verb phrases in that text that are independent clauses
+texts_all = mutate(texts_all, ind_perc = NR_ind/NR_vp_nf)
+```
+
+##2.6 Calculating and adding frequency information for overt subjects
+
+```{r overt subjects}
+verbs_nf_ovsub_count = verbs_nf %>%
+  filter(overt_subject == "yes") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_ovsub_count) = c("Text_id", "NR_ovsub")
+head(verbs_nf_ovsub_count)
+
+## combine count of non-finite verb phrases with overt subject for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_ovsub_count, by = "Text_id")
+summary(texts_all$NR_ovsub)
+
+## Some of the texts might now have NA as number of non-finite verb phrases with overt subject as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 69])) { # 69 indicates the 69th column, which is NR_ovsub
+  texts_all[n, 69] <- 0 }
+}
+
+# add measurement: non-finite verb phrases with overt subject per million words
+texts_all = mutate(texts_all, ovsub_pmw = (NR_ovsub/NR_tokens)*1000000)
+# add measurement: non-finite verb phrases with overt subject per hundred words
+texts_all = mutate(texts_all, ovsub_phw = (NR_ovsub/NR_tokens)*100)
+# add measurement: non-finite verb phrases with overt subject per sentence
+texts_all = mutate(texts_all, ovsub_ps = NR_ovsub/NR_sentences)
+# add percentage of all non-finite verb phrases in that text that have an overt subject
+texts_all = mutate(texts_all, ovsub_perc = NR_ovsub/NR_vp_nf)
+```
+
+##2.7 Calculating and adding frequency information for types of nominal clauses
+
+```{r subject clauses}
+verbs_nf_subj_count = verbs_nf %>%
+  filter(clause_type == "nominal") %>%
+  filter(nomclause_function == "subject") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_subj_count) = c("Text_id", "NR_subj")
+head(verbs_nf_subj_count)
+
+## combine count of non-finite verb phrases functioning as subjects for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_subj_count, by = "Text_id")
+summary(texts_all$NR_subj)
+
+## Some of the texts might now have NA as number of non-finite verb phrases functioning as subjects as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 74])) { # 74 indicates the 74th column, which is NR_subj
+  texts_all[n, 74] <- 0 }
+}
+
+# add measurement: subject clauses per million words
+texts_all = mutate(texts_all, subj_pmw = (NR_subj/NR_tokens)*1000000)
+# add measurement: subject clauses per hundred words
+texts_all = mutate(texts_all, subj_phw = (NR_subj/NR_tokens)*100)
+# add measurement: subject clauses per sentence
+texts_all = mutate(texts_all, subj_ps = NR_subj/NR_sentences)
+# add percentage of all non-finite nominal clauses in that text that are subjects
+texts_all = mutate(texts_all, subj_perc = NR_subj/NR_nom)
+```
+
+```{r object clauses}
+verbs_nf_obj_count = verbs_nf %>%
+  filter(clause_type == "nominal") %>%
+  filter(nomclause_function == "object") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_obj_count) = c("Text_id", "NR_obj")
+head(verbs_nf_obj_count)
+
+## combine count of non-finite verb phrases functioning as objects for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_obj_count, by = "Text_id")
+summary(texts_all$NR_obj)
+
+## Some of the texts might now have NA as number of non-finite verb phrases functioning as objects as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 79])) { # 79 indicates the 79th column, which is NR_obj
+  texts_all[n, 79] <- 0 }
+}
+
+# add measurement: object clauses per million words
+texts_all = mutate(texts_all, obj_pmw = (NR_obj/NR_tokens)*1000000)
+# add measurement: object clauses per hundred words
+texts_all = mutate(texts_all, obj_phw = (NR_obj/NR_tokens)*100)
+# add measurement: object clauses per sentence
+texts_all = mutate(texts_all, obj_ps = NR_obj/NR_sentences)
+# add percentage of all non-finite nominal clauses in that text that are objects
+texts_all = mutate(texts_all, obj_perc = NR_obj/NR_nom)
+```
+
+```{r object complement clauses}
+verbs_nf_compo_count = verbs_nf %>%
+  filter(clause_type == "nominal") %>%
+  filter(nomclause_function == "complement_object") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_compo_count) = c("Text_id", "NR_compo")
+head(verbs_nf_compo_count)
+
+## combine count of non-finite verb phrases functioning as object complements for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_compo_count, by = "Text_id")
+summary(texts_all$NR_compo)
+
+## Some of the texts might now have NA as number of non-finite verb phrases functioning as object complements as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 84])) { # 84 indicates the 83rd column, which is NR_compo
+  texts_all[n, 84] <- 0 }
+}
+
+# add measurement: object complement clauses per million words
+texts_all = mutate(texts_all, compo_pmw = (NR_compo/NR_tokens)*1000000)
+# add measurement: object complement clauses per hundred words
+texts_all = mutate(texts_all, compo_phw = (NR_compo/NR_tokens)*100)
+# add measurement: object complement clauses per sentence
+texts_all = mutate(texts_all, compo_ps = NR_compo/NR_sentences)
+# add percentage of all non-finite nominal clauses in that text that are object complements
+texts_all = mutate(texts_all, compo_perc = NR_compo/NR_nom)
+```
+
+```{r subject complement clauses}
+verbs_nf_comps_count = verbs_nf %>%
+  filter(clause_type == "nominal") %>%
+  filter(nomclause_function == "complement_subject") %>%
+  group_by(Text_id) %>%
+  count()
+colnames(verbs_nf_comps_count) = c("Text_id", "NR_comps")
+head(verbs_nf_comps_count)
+
+## combine count of non-finite verb phrases functioning as subject complements for each text with existing table on texts
+texts_all = left_join(texts_all, verbs_nf_comps_count, by = "Text_id")
+summary(texts_all$NR_comps)
+
+## Some of the texts might now have NA as number of non-finite verb phrases functioning as subject complements as a result of the joining process. This needs to be corrected to 0
+for (n in 1:nrow(texts_all)) {
+if (is.na(texts_all[n, 89])) { # 89 indicates the 89th column, which is NR_comps
+  texts_all[n, 89] <- 0 }
+}
+
+# add measurement: subject complement clauses per million words
+texts_all = mutate(texts_all, comps_pmw = (NR_comps/NR_tokens)*1000000)
+# add measurement: subject complement clauses per hundred words
+texts_all = mutate(texts_all, comps_phw = (NR_comps/NR_tokens)*100)
+# add measurement: subject complement clauses per sentence
+texts_all = mutate(texts_all, comps_ps = NR_comps/NR_sentences)
+# add percentage of all non-finite nominal clauses in that text that are subject complements
+texts_all = mutate(texts_all, comps_perc = NR_comps/NR_nom)
+```
+
+##2.8 Write new tables to file
+
+```{r}
+texts_all_EO = subset(texts_all, Language == "English") ## we need to create these sub-sets again for the register code below.
+texts_all_GO = subset(texts_all, Language == "German")
+
+## this command does not need to be run (I already created and saved the file)
+#write_xlsx(texts_all, path = "Overview_texts_vp.xlsx")
+```
+
+
+
+#3. Adding frequency information to existing data frame on register-level
+
+For this to work, the code above (data frame with texts) needs to be run first.
+
+##3.1 Calculate and add frequency information for all verb phrases
+
+For each register we are adding the absolute and relative frequency of verb phrases. As above, I am calculating three different relative measurements: per one hundred words, per one million words, per sentence. For each I am adding the mean, the minimum and maximum value, and the standard deviation (since these might be relevant for plotting later on).
+
+```{r sum of counts}
+## Here I am first summing up the absolute counts from all the texts in a given register.
+registers_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_vp = sum(NR_vp, na.rm = TRUE))
+colnames(registers_0) = c("RegisterID", "NR_vp")
+```
+
+```{r per million words}
+## first, calculate the mean of all relative measurements from the text level.
+registers_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(vp_pmw_av = mean(vp_pmw, na.rm = TRUE))
+colnames(registers_1) = c("RegisterID", "vp_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation to the register data frame.
+registers_1$vp_pmw_min = pull(summarise(group_by(texts_all, RegisterID), min(vp_pmw, na.rm = TRUE)), 2)
+registers_1$vp_pmw_max = pull(summarise(group_by(texts_all, RegisterID), max(vp_pmw, na.rm = TRUE)), 2)
+registers_1$vp_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(vp_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(vp_phw_av = mean(vp_phw, na.rm = TRUE))
+colnames(registers_2) = c("RegisterID", "vp_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_2$vp_phw_min = pull(summarise(group_by(texts_all, RegisterID), min(vp_phw, na.rm = TRUE)), 2)
+registers_2$vp_phw_max = pull(summarise(group_by(texts_all, RegisterID), max(vp_phw, na.rm = TRUE)), 2)
+registers_2$vp_phw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(vp_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(vp_ps_av = mean(vp_ps, na.rm = TRUE))
+colnames(registers_3) = c("RegisterID", "vp_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_3$vp_ps_min = pull(summarise(group_by(texts_all,RegisterID), min(vp_ps, na.rm = TRUE)), 2)
+registers_3$vp_ps_max = pull(summarise(group_by(texts_all, RegisterID), max(vp_ps, na.rm = TRUE)), 2)
+registers_3$vp_ps_sd = pull(summarise(group_by(texts_all, RegisterID), sd(vp_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+## combine into one table
+registers_01 = left_join(registers_0, registers_1, by = "RegisterID")
+registers_012 = left_join(registers_01, registers_2, by = "RegisterID")
+registers_all = left_join(registers_012, registers_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers_meta, registers_all, by = c("RegisterID"))
+```
+
+
+##3.2 Calculate and add frequency information for finite verb phrases
+
+```{r sum of counts}
+registers_f_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_vp_f = sum(NR_vp, na.rm = TRUE))
+colnames(registers_f_0) = c("RegisterID", "NR_vp_f")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_f_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(vp_f_pmw_av = mean(vp_f_pmw, na.rm = TRUE))
+colnames(registers_f_1) = c("RegisterID", "vp_f_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_f_1$vp_f_pmw_min = pull(summarise(group_by(texts_all, RegisterID), min(vp_f_pmw, na.rm = TRUE)), 2)
+registers_f_1$vp_f_pmw_max = pull(summarise(group_by(texts_all, RegisterID), max(vp_f_pmw, na.rm = TRUE)), 2)
+registers_f_1$vp_f_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(vp_f_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_f_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(vp_f_phw_av = mean(vp_f_phw, na.rm = TRUE))
+colnames(registers_f_2) = c("RegisterID", "vp_f_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_f_2$vp_f_phw_min = pull(summarise(group_by(texts_all, RegisterID), min(vp_f_phw, na.rm = TRUE)), 2)
+registers_f_2$vp_f_phw_max = pull(summarise(group_by(texts_all, RegisterID), max(vp_f_phw, na.rm = TRUE)), 2)
+registers_f_2$vp_f_phw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(vp_f_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_f_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(vp_f_ps_av = mean(vp_f_ps, na.rm = TRUE))
+colnames(registers_f_3) = c("RegisterID", "vp_f_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_f_3$vp_f_ps_min = pull(summarise(group_by(texts_all, RegisterID), min(vp_f_ps, na.rm = TRUE)), 2)
+registers_f_3$vp_f_ps_max = pull(summarise(group_by(texts_all, RegisterID), max(vp_f_ps, na.rm = TRUE)), 2)
+registers_f_3$vp_f_ps_sd = pull(summarise(group_by(texts_all, RegisterID), sd(vp_f_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+## combine into one table
+registers_f01 = left_join(registers_f_0, registers_f_1, by = "RegisterID")
+registers_f012 = left_join(registers_f01, registers_f_2, by = "RegisterID")
+registers_f = left_join(registers_f012, registers_f_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_f, by = c("RegisterID"))
+```
+
+
+##3.3 Calculate and add frequency information for non-finite verb phrases
+
+```{r sum of counts}
+registers_nf_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_vp_nf = sum(NR_vp_nf, na.rm = TRUE))
+colnames(registers_nf_0) = c("RegisterID", "NR_vp_nf")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_nf_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(vp_nf_pmw_av = mean(vp_nf_pmw, na.rm = TRUE))
+colnames(registers_nf_1) = c("RegisterID", "vp_nf_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_nf_1$vp_nf_pmw_min = pull(summarise(group_by(texts_all, RegisterID), min(vp_nf_pmw, na.rm = TRUE)), 2)
+registers_nf_1$vp_nf_pmw_max = pull(summarise(group_by(texts_all, RegisterID), max(vp_nf_pmw, na.rm = TRUE)), 2)
+registers_nf_1$vp_nf_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(vp_nf_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_nf_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(vp_nf_phw_av = mean(vp_nf_phw, na.rm = TRUE))
+colnames(registers_nf_2) = c("RegisterID", "vp_nf_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_nf_2$vp_nf_phw_min = pull(summarise(group_by(texts_all, RegisterID), min(vp_nf_phw, na.rm = TRUE)), 2)
+registers_nf_2$vp_nf_phw_max = pull(summarise(group_by(texts_all, RegisterID), max(vp_nf_phw, na.rm = TRUE)), 2)
+registers_nf_2$vp_nf_phw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(vp_nf_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_nf_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(vp_nf_ps_av = mean(vp_nf_ps, na.rm = TRUE))
+colnames(registers_nf_3) = c("RegisterID", "vp_nf_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_nf_3$vp_nf_ps_min = pull(summarise(group_by(texts_all, RegisterID), min(vp_nf_ps, na.rm = TRUE)), 2)
+registers_nf_3$vp_nf_ps_max = pull(summarise(group_by(texts_all, RegisterID), max(vp_nf_ps, na.rm = TRUE)), 2)
+registers_nf_3$vp_nf_ps_sd = pull(summarise(group_by(texts_all, RegisterID), sd(vp_nf_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_nf01 = left_join(registers_nf_0, registers_nf_1, by = "RegisterID")
+registers_nf012 = left_join(registers_nf01, registers_nf_2, by = "RegisterID")
+registers_nf = left_join(registers_nf012, registers_nf_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_nf, by = c("RegisterID"))
+```
+
+
+##3.4 Calculate and add frequency information for individual verb forms
+
+###3.4.1 Bare infinitives
+
+```{r sum of counts}
+registers_infbare_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_infbare = sum(NR_infbare, na.rm = TRUE))
+colnames(registers_infbare_0) = c("RegisterID", "NR_infbare")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_infbare_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(infbare_pmw_av = mean(infbare_pmw, na.rm = TRUE))
+colnames(registers_infbare_1) = c("RegisterID", "infbare_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_infbare_1$infbare_pmw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(infbare_pmw, na.rm = TRUE)), 2)
+registers_infbare_1$infbare_pmw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(infbare_pmw, na.rm = TRUE)), 2)
+registers_infbare_1$infbare_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(infbare_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_infbare_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(infbare_phw_av = mean(infbare_phw, na.rm = TRUE))
+colnames(registers_infbare_2) = c("RegisterID", "infbare_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_infbare_2$infbare_phw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(infbare_phw, na.rm = TRUE)), 2)
+registers_infbare_2$infbare_phw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(infbare_phw, na.rm = TRUE)), 2)
+registers_infbare_2$infbare_phw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(infbare_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_infbare_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(infbare_ps_av = mean(infbare_ps, na.rm = TRUE))
+colnames(registers_infbare_3) = c("RegisterID", "infbare_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_infbare_3$infbare_ps_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(infbare_ps, na.rm = TRUE)), 2)
+registers_infbare_3$infbare_ps_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(infbare_ps, na.rm = TRUE)), 2)
+registers_infbare_3$infbare_ps_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(infbare_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_infbare01 = left_join(registers_infbare_0, registers_infbare_1, by = "RegisterID")
+registers_infbare012 = left_join(registers_infbare01, registers_infbare_2, by = "RegisterID")
+registers_infbare = left_join(registers_infbare012, registers_infbare_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_infbare, by = c("RegisterID"))
+```
+
+###3.4.2 To-infinitives
+
+```{r sum of counts}
+registers_infto_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_infto = sum(NR_infto, na.rm = TRUE))
+colnames(registers_infto_0) = c("RegisterID", "NR_infto")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_infto_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(infto_pmw_av = mean(infto_pmw, na.rm = TRUE))
+colnames(registers_infto_1) = c("RegisterID", "infto_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_infto_1$infto_pmw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(infto_pmw, na.rm = TRUE)), 2)
+registers_infto_1$infto_pmw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(infto_pmw, na.rm = TRUE)), 2)
+registers_infto_1$infto_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(infto_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_infto_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(infto_phw_av = mean(infto_phw, na.rm = TRUE))
+colnames(registers_infto_2) = c("RegisterID", "infto_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_infto_2$infto_phw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(infto_phw, na.rm = TRUE)), 2)
+registers_infto_2$infto_phw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(infto_phw, na.rm = TRUE)), 2)
+registers_infto_2$infto_phw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(infto_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_infto_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(infto_ps_av = mean(infto_ps, na.rm = TRUE))
+colnames(registers_infto_3) = c("RegisterID", "infto_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_infto_3$infto_ps_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(infto_ps, na.rm = TRUE)), 2)
+registers_infto_3$infto_ps_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(infto_ps, na.rm = TRUE)), 2)
+registers_infto_3$infto_ps_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(infto_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_infto01 = left_join(registers_infto_0, registers_infto_1, by = "RegisterID")
+registers_infto012 = left_join(registers_infto01, registers_infto_2, by = "RegisterID")
+registers_infto = left_join(registers_infto012, registers_infto_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_infto, by = c("RegisterID"))
+```
+
+
+###3.4.3 Past participles
+
+```{r sum of counts}
+registers_parpas_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_parpas = sum(NR_parpas, na.rm = TRUE))
+colnames(registers_parpas_0) = c("RegisterID", "NR_parpas")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_parpas_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(parpas_pmw_av = mean(parpas_pmw, na.rm = TRUE))
+colnames(registers_parpas_1) = c("RegisterID", "parpas_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_parpas_1$parpas_pmw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(parpas_pmw, na.rm = TRUE)), 2)
+registers_parpas_1$parpas_pmw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(parpas_pmw, na.rm = TRUE)), 2)
+registers_parpas_1$parpas_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(parpas_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_parpas_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(parpas_phw_av = mean(parpas_phw, na.rm = TRUE))
+colnames(registers_parpas_2) = c("RegisterID", "parpas_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_parpas_2$parpas_phw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(parpas_phw, na.rm = TRUE)), 2)
+registers_parpas_2$parpas_phw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(parpas_phw, na.rm = TRUE)), 2)
+registers_parpas_2$parpas_phw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(parpas_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_parpas_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(parpas_ps_av = mean(parpas_ps, na.rm = TRUE))
+colnames(registers_parpas_3) = c("RegisterID", "parpas_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_parpas_3$parpas_ps_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(parpas_ps, na.rm = TRUE)), 2)
+registers_parpas_3$parpas_ps_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(parpas_ps, na.rm = TRUE)), 2)
+registers_parpas_3$parpas_ps_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(parpas_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_parpas01 = left_join(registers_parpas_0, registers_parpas_1, by = "RegisterID")
+registers_parpas012 = left_join(registers_parpas01, registers_parpas_2, by = "RegisterID")
+registers_parpas = left_join(registers_parpas012, registers_parpas_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_parpas, by = c("RegisterID"))
+```
+
+
+###3.4.4 Present participles
+
+```{r sum of counts}
+registers_parpre_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_parpre = sum(NR_parpre, na.rm = TRUE))
+colnames(registers_parpre_0) = c("RegisterID", "NR_parpre")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_parpre_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(parpre_pmw_av = mean(parpre_pmw, na.rm = TRUE))
+colnames(registers_parpre_1) = c("RegisterID", "parpre_pmw_av")
+
+for (n in 1:nrow(registers_parpre_1)) {
+if (is.na(registers_parpre_1[n, 2])) { # 2 indicates the 2nd column, which is parpre_pmw_av
+  registers_parpre_1[n, 2] <- 0 }
+}
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_parpre_1$parpre_pmw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(parpre_pmw, na.rm = TRUE)), 2)
+registers_parpre_1$parpre_pmw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(parpre_pmw, na.rm = TRUE)), 2)
+registers_parpre_1$parpre_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(parpre_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_parpre_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(parpre_phw_av = mean(parpre_phw, na.rm = TRUE))
+colnames(registers_parpre_2) = c("RegisterID", "parpre_phw_av")
+
+for (n in 1:nrow(registers_parpre_2)) {
+if (is.na(registers_parpre_2[n, 2])) { # 2 indicates the 2nd column, which is parpre_pmw_av
+  registers_parpre_2[n, 2] <- 0 }
+}
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_parpre_2$parpre_phw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(parpre_phw, na.rm = TRUE)), 2)
+registers_parpre_2$parpre_phw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(parpre_phw, na.rm = TRUE)), 2)
+registers_parpre_2$parpre_phw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(parpre_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_parpre_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(parpre_ps_av = mean(parpre_ps, na.rm = TRUE))
+colnames(registers_parpre_3) = c("RegisterID", "parpre_ps_av")
+
+for (n in 1:nrow(registers_parpre_1)) {
+if (is.na(registers_parpre_1[n, 3])) { # 2 indicates the 2nd column, which is parpre_pmw_av
+  registers_parpre_1[n, 3] <- 0 }
+}
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_parpre_3$parpre_ps_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(parpre_ps, na.rm = TRUE)), 2)
+registers_parpre_3$parpre_ps_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(parpre_ps, na.rm = TRUE)), 2)
+registers_parpre_3$parpre_ps_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(parpre_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_parpre01 = left_join(registers_parpre_0, registers_parpre_1, by = "RegisterID")
+registers_parpre012 = left_join(registers_parpre01, registers_parpre_2, by = "RegisterID")
+registers_parpre = left_join(registers_parpre012, registers_parpre_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_parpre, by = c("RegisterID"))
+```
+
+
+##3.5 Calculate and add frequency information for sentence functions
+
+###3.5.1 Adverbial clauses
+
+```{r sum of counts}
+registers_adv_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_adv = sum(NR_adv, na.rm = TRUE))
+colnames(registers_adv_0) = c("RegisterID", "NR_adv")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_adv_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(adv_pmw_av = mean(adv_pmw, na.rm = TRUE))
+colnames(registers_adv_1) = c("RegisterID", "adv_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_adv_1$adv_pmw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(adv_pmw, na.rm = TRUE)), 2)
+registers_adv_1$adv_pmw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(adv_pmw, na.rm = TRUE)), 2)
+registers_adv_1$adv_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(adv_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_adv_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(adv_phw_av = mean(adv_phw, na.rm = TRUE))
+colnames(registers_adv_2) = c("RegisterID", "adv_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_adv_2$adv_phw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(adv_phw, na.rm = TRUE)), 2)
+registers_adv_2$adv_phw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(adv_phw, na.rm = TRUE)), 2)
+registers_adv_2$adv_phw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(adv_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_adv_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(adv_ps_av = mean(adv_ps, na.rm = TRUE))
+colnames(registers_adv_3) = c("RegisterID", "adv_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_adv_3$adv_ps_min = pull(summarise(group_by(texts_all, RegisterID), min(adv_ps, na.rm = TRUE)), 2)
+registers_adv_3$adv_ps_max = pull(summarise(group_by(texts_all, RegisterID), max(adv_ps, na.rm = TRUE)), 2)
+registers_adv_3$adv_ps_sd = pull(summarise(group_by(texts_all, RegisterID), sd(adv_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_adv01 = left_join(registers_adv_0, registers_adv_1, by = "RegisterID")
+registers_adv012 = left_join(registers_adv01, registers_adv_2, by = "RegisterID")
+registers_adv = left_join(registers_adv012, registers_adv_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_adv, by = c("RegisterID"))
+```
+
+###3.5.2 Nominal clauses
+
+```{r sum of counts}
+registers_nom_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_nom = sum(NR_nom, na.rm = TRUE))
+colnames(registers_nom_0) = c("RegisterID", "NR_nom")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_nom_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(nom_pmw_av = mean(nom_pmw, na.rm = TRUE))
+colnames(registers_nom_1) = c("RegisterID", "nom_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_nom_1$nom_pmw_min = pull(summarise(group_by(texts_all, RegisterID), min(nom_pmw, na.rm = TRUE)), 2)
+registers_nom_1$nom_pmw_max = pull(summarise(group_by(texts_all, RegisterID), max(nom_pmw, na.rm = TRUE)), 2)
+registers_nom_1$nom_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(nom_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_nom_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(nom_phw_av = mean(nom_phw, na.rm = TRUE))
+colnames(registers_nom_2) = c("RegisterID", "nom_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_nom_2$nom_phw_min = pull(summarise(group_by(texts_all, RegisterID), min(nom_phw, na.rm = TRUE)), 2)
+registers_nom_2$nom_phw_max = pull(summarise(group_by(texts_all, RegisterID), max(nom_phw, na.rm = TRUE)), 2)
+registers_nom_2$nom_phw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(nom_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_nom_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(nom_ps_av = mean(nom_ps, na.rm = TRUE))
+colnames(registers_nom_3) = c("RegisterID", "nom_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_nom_3$nom_ps_min = pull(summarise(group_by(texts_all, RegisterID), min(nom_ps, na.rm = TRUE)), 2)
+registers_nom_3$nom_ps_max = pull(summarise(group_by(texts_all, RegisterID), max(nom_ps, na.rm = TRUE)), 2)
+registers_nom_3$nom_ps_sd = pull(summarise(group_by(texts_all, RegisterID), sd(nom_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_nom01 = left_join(registers_nom_0, registers_nom_1, by = "RegisterID")
+registers_nom012 = left_join(registers_nom01, registers_nom_2, by = "RegisterID")
+registers_nom = left_join(registers_nom012, registers_nom_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_nom, by = c("RegisterID"))
+```
+
+###3.5.3 Embedded clauses
+
+```{r sum of counts}
+registers_emb_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_emb = sum(NR_emb, na.rm = TRUE))
+colnames(registers_emb_0) = c("RegisterID", "NR_emb")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_emb_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(emb_pmw_av = mean(emb_pmw, na.rm = TRUE))
+colnames(registers_emb_1) = c("RegisterID", "emb_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_emb_1$emb_pmw_min = pull(summarise(group_by(texts_all, RegisterID), min(emb_pmw, na.rm = TRUE)), 2)
+registers_emb_1$emb_pmw_max = pull(summarise(group_by(texts_all, RegisterID), max(emb_pmw, na.rm = TRUE)), 2)
+registers_emb_1$emb_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(emb_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_emb_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(emb_phw_av = mean(emb_phw, na.rm = TRUE))
+colnames(registers_emb_2) = c("RegisterID", "emb_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_emb_2$emb_phw_min = pull(summarise(group_by(texts_all, RegisterID), min(emb_phw, na.rm = TRUE)), 2)
+registers_emb_2$emb_phw_max = pull(summarise(group_by(texts_all, RegisterID), max(emb_phw, na.rm = TRUE)), 2)
+registers_emb_2$emb_phw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(emb_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_emb_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(emb_ps_av = mean(emb_ps, na.rm = TRUE))
+colnames(registers_emb_3) = c("RegisterID", "emb_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_emb_3$emb_ps_min = pull(summarise(group_by(texts_all, RegisterID), min(emb_ps, na.rm = TRUE)), 2)
+registers_emb_3$emb_ps_max = pull(summarise(group_by(texts_all, RegisterID), max(emb_ps, na.rm = TRUE)), 2)
+registers_emb_3$emb_ps_sd = pull(summarise(group_by(texts_all, RegisterID), sd(emb_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_emb01 = left_join(registers_emb_0, registers_emb_1, by = "RegisterID")
+registers_emb012 = left_join(registers_emb01, registers_emb_2, by = "RegisterID")
+registers_emb = left_join(registers_emb012, registers_emb_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_emb, by = c("RegisterID"))
+```
+
+###3.5.4 Independent clauses
+
+```{r sum of counts}
+registers_ind_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_ind = sum(NR_ind, na.rm = TRUE))
+colnames(registers_ind_0) = c("RegisterID", "NR_ind")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_ind_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(ind_pmw_av = mean(ind_pmw, na.rm = TRUE))
+colnames(registers_ind_1) = c("RegisterID", "ind_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_ind_1$ind_pmw_min = pull(summarise(group_by(texts_all, RegisterID), min(ind_pmw, na.rm = TRUE)), 2)
+registers_ind_1$ind_pmw_max = pull(summarise(group_by(texts_all, RegisterID), max(ind_pmw, na.rm = TRUE)), 2)
+registers_ind_1$ind_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(ind_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_ind_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(ind_phw_av = mean(ind_phw, na.rm = TRUE))
+colnames(registers_ind_2) = c("RegisterID", "ind_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_ind_2$ind_phw_min = pull(summarise(group_by(texts_all, RegisterID), min(ind_phw, na.rm = TRUE)), 2)
+registers_ind_2$ind_phw_max = pull(summarise(group_by(texts_all, RegisterID), max(ind_phw, na.rm = TRUE)), 2)
+registers_ind_2$ind_phw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(ind_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_ind_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(ind_ps_av = mean(ind_ps, na.rm = TRUE))
+colnames(registers_ind_3) = c("RegisterID", "ind_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_ind_3$ind_ps_min = pull(summarise(group_by(texts_all, RegisterID), min(ind_ps, na.rm = TRUE)), 2)
+registers_ind_3$ind_ps_max = pull(summarise(group_by(texts_all, RegisterID), max(ind_ps, na.rm = TRUE)), 2)
+registers_ind_3$ind_ps_sd = pull(summarise(group_by(texts_all, RegisterID), sd(ind_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_ind01 = left_join(registers_ind_0, registers_ind_1, by = "RegisterID")
+registers_ind012 = left_join(registers_ind01, registers_ind_2, by = "RegisterID")
+registers_ind = left_join(registers_ind012, registers_ind_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_ind, by = c("RegisterID"))
+```
+
+
+##3.6 Calculating and adding frequency information for overt subjects
+
+```{r sum of counts}
+registers_ovsub_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_ovsub = sum(NR_ovsub, na.rm = TRUE))
+colnames(registers_ovsub_0) = c("RegisterID", "NR_ovsub")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_ovsub_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(ovsub_pmw_av = mean(ovsub_pmw, na.rm = TRUE))
+colnames(registers_ovsub_1) = c("RegisterID", "ovsub_pmw_av")
+
+for (n in 1:nrow(registers_ovsub_1)) {
+if (is.na(registers_ovsub_1[n, 2])) { # 2 indicates the 2nd column, which is ovsub_pmw_av
+  registers_ovsub_1[n, 2] <- 0 }
+}
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_ovsub_1$ovsub_pmw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(ovsub_pmw, na.rm = TRUE)), 2)
+registers_ovsub_1$ovsub_pmw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(ovsub_pmw, na.rm = TRUE)), 2)
+registers_ovsub_1$ovsub_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(ovsub_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_ovsub_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(ovsub_phw_av = mean(ovsub_phw, na.rm = TRUE))
+colnames(registers_ovsub_2) = c("RegisterID", "ovsub_phw_av")
+
+for (n in 1:nrow(registers_ovsub_2)) {
+if (is.na(registers_ovsub_2[n, 2])) { # 2 indicates the 2nd column, which is ovsub_phw_av
+  registers_ovsub_2[n, 2] <- 0 }
+}
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_ovsub_2$ovsub_phw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(ovsub_phw, na.rm = TRUE)), 2)
+registers_ovsub_2$ovsub_phw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(ovsub_phw, na.rm = TRUE)), 2)
+registers_ovsub_2$ovsub_phw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(ovsub_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_ovsub_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(ovsub_ps_av = mean(ovsub_ps, na.rm = TRUE))
+colnames(registers_ovsub_3) = c("RegisterID", "ovsub_ps_av")
+
+for (n in 1:nrow(registers_ovsub_3)) {
+if (is.na(registers_ovsub_3[n, 2])) { # 2 indicates the 2nd column, which is ovsub_pmw_av
+  registers_ovsub_3[n, 2] <- 0 }
+}
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_ovsub_3$ovsub_ps_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(ovsub_ps, na.rm = TRUE)), 2)
+registers_ovsub_3$ovsub_ps_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(ovsub_ps, na.rm = TRUE)), 2)
+registers_ovsub_3$ovsub_ps_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(ovsub_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_ovsub01 = left_join(registers_ovsub_0, registers_ovsub_1, by = "RegisterID")
+registers_ovsub012 = left_join(registers_ovsub01, registers_ovsub_2, by = "RegisterID")
+registers_ovsub = left_join(registers_ovsub012, registers_ovsub_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_ovsub, by = c("RegisterID"))
+```
+
+
+##3.7 Calculating and adding frequency information for types of nominal clauses
+
+###3.7.1 Subject clauses
+
+```{r sum of counts}
+registers_subj_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_subj = sum(NR_subj, na.rm = TRUE))
+colnames(registers_subj_0) = c("RegisterID", "NR_subj")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_subj_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(subj_pmw_av = mean(subj_pmw, na.rm = TRUE))
+colnames(registers_subj_1) = c("RegisterID", "subj_pmw_av")
+
+for (n in 1:nrow(registers_subj_1)) {
+if (is.na(registers_subj_1[n, 2])) { # 2 indicates the 2nd column, which is subj_pmw_av
+  registers_subj_1[n, 2] <- 0 }
+}
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_subj_1$subj_pmw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(subj_pmw, na.rm = TRUE)), 2)
+registers_subj_1$subj_pmw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(subj_pmw, na.rm = TRUE)), 2)
+registers_subj_1$subj_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(subj_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_subj_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(subj_phw_av = mean(subj_phw, na.rm = TRUE))
+colnames(registers_subj_2) = c("RegisterID", "subj_phw_av")
+
+for (n in 1:nrow(registers_subj_2)) {
+if (is.na(registers_subj_2[n, 2])) { # 2 indicates the 2nd column, which is subj_phw_av
+  registers_subj_2[n, 2] <- 0 }
+}
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_subj_2$subj_phw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(subj_phw, na.rm = TRUE)), 2)
+registers_subj_2$subj_phw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(subj_phw, na.rm = TRUE)), 2)
+registers_subj_2$subj_phw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(subj_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_subj_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(subj_ps_av = mean(subj_ps, na.rm = TRUE))
+colnames(registers_subj_3) = c("RegisterID", "subj_ps_av")
+
+for (n in 1:nrow(registers_subj_3)) {
+if (is.na(registers_subj_3[n, 2])) { # 2 indicates the 2nd column, which is subj_ps_av
+  registers_subj_3[n, 2] <- 0 }
+}
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_subj_3$subj_ps_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(subj_ps, na.rm = TRUE)), 2)
+registers_subj_3$subj_ps_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(subj_ps, na.rm = TRUE)), 2)
+registers_subj_3$subj_ps_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(subj_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_subj01 = left_join(registers_subj_0, registers_subj_1, by = "RegisterID")
+registers_subj012 = left_join(registers_subj01, registers_subj_2, by = "RegisterID")
+registers_subj = left_join(registers_subj012, registers_subj_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_subj, by = c("RegisterID"))
+```
+
+###3.7.2 Object clauses
+
+```{r sum of counts}
+registers_obj_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_obj = sum(NR_obj, na.rm = TRUE))
+colnames(registers_obj_0) = c("RegisterID", "NR_obj")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_obj_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(obj_pmw_av = mean(obj_pmw, na.rm = TRUE))
+colnames(registers_obj_1) = c("RegisterID", "obj_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_obj_1$obj_pmw_min = pull(summarise(group_by(texts_all, RegisterID), min(obj_pmw, na.rm = TRUE)), 2)
+registers_obj_1$obj_pmw_max = pull(summarise(group_by(texts_all, RegisterID), max(obj_pmw, na.rm = TRUE)), 2)
+registers_obj_1$obj_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(obj_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_obj_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(obj_phw_av = mean(obj_phw, na.rm = TRUE))
+colnames(registers_obj_2) = c("RegisterID", "obj_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_obj_2$obj_phw_min = pull(summarise(group_by(texts_all, RegisterID), min(obj_phw, na.rm = TRUE)), 2)
+registers_obj_2$obj_phw_max = pull(summarise(group_by(texts_all, RegisterID), max(obj_phw, na.rm = TRUE)), 2)
+registers_obj_2$obj_phw_sd = pull(summarise(group_by(texts_all, RegisterID), sd(obj_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_obj_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(obj_ps_av = mean(obj_ps, na.rm = TRUE))
+colnames(registers_obj_3) = c("RegisterID", "obj_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_obj_3$obj_ps_min = pull(summarise(group_by(texts_all, RegisterID), min(obj_ps, na.rm = TRUE)), 2)
+registers_obj_3$obj_ps_max = pull(summarise(group_by(texts_all, RegisterID), max(obj_ps, na.rm = TRUE)), 2)
+registers_obj_3$obj_ps_sd = pull(summarise(group_by(texts_all, RegisterID), sd(obj_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_obj01 = left_join(registers_obj_0, registers_obj_1, by = "RegisterID")
+registers_obj012 = left_join(registers_obj01, registers_obj_2, by = "RegisterID")
+registers_obj = left_join(registers_obj012, registers_obj_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_obj, by = c("RegisterID"))
+```
+
+###3.7.3 Object complement clauses
+
+```{r sum of counts}
+registers_compo_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_compo = sum(NR_compo, na.rm = TRUE))
+colnames(registers_compo_0) = c("RegisterID", "NR_compo")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_compo_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(compo_pmw_av = mean(compo_pmw, na.rm = TRUE))
+colnames(registers_compo_1) = c("RegisterID", "compo_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_compo_1$compo_pmw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(compo_pmw, na.rm = TRUE)), 2)
+registers_compo_1$compo_pmw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(compo_pmw, na.rm = TRUE)), 2)
+registers_compo_1$compo_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(compo_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_compo_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(compo_phw_av = mean(compo_phw, na.rm = TRUE))
+colnames(registers_compo_2) = c("RegisterID", "compo_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_compo_2$compo_phw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(compo_phw, na.rm = TRUE)), 2)
+registers_compo_2$compo_phw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(compo_phw, na.rm = TRUE)), 2)
+registers_compo_2$compo_phw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(compo_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_compo_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(compo_ps_av = mean(compo_ps, na.rm = TRUE))
+colnames(registers_compo_3) = c("RegisterID", "compo_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_compo_3$compo_ps_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(compo_ps, na.rm = TRUE)), 2)
+registers_compo_3$compo_ps_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(compo_ps, na.rm = TRUE)), 2)
+registers_compo_3$compo_ps_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(compo_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_compo01 = left_join(registers_compo_0, registers_compo_1, by = "RegisterID")
+registers_compo012 = left_join(registers_compo01, registers_compo_2, by = "RegisterID")
+registers_compo = left_join(registers_compo012, registers_compo_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_compo, by = c("RegisterID"))
+```
+
+###3.7.4 Subject complement clauses
+
+```{r sum of counts}
+registers_comps_0 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(NR_comps = sum(NR_comps, na.rm = TRUE))
+colnames(registers_comps_0) = c("RegisterID", "NR_comps")
+```
+
+```{r per million words}
+## first, calculate the mean
+registers_comps_1 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(comps_pmw_av = mean(comps_pmw, na.rm = TRUE))
+colnames(registers_comps_1) = c("RegisterID", "comps_pmw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_comps_1$comps_pmw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(comps_pmw, na.rm = TRUE)), 2)
+registers_comps_1$comps_pmw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(comps_pmw, na.rm = TRUE)), 2)
+registers_comps_1$comps_pmw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(comps_pmw, na.rm = TRUE)), 2)
+```
+
+```{r per hundred words}
+## first, calculate the mean
+registers_comps_2 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(comps_phw_av = mean(comps_phw, na.rm = TRUE))
+colnames(registers_comps_2) = c("RegisterID", "comps_phw_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_comps_2$comps_phw_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(comps_phw, na.rm = TRUE)), 2)
+registers_comps_2$comps_phw_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(comps_phw, na.rm = TRUE)), 2)
+registers_comps_2$comps_phw_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(comps_phw, na.rm = TRUE)), 2)
+```
+
+```{r per sentence}
+## first, calculate the mean
+registers_comps_3 = texts_all %>%
+  group_by(RegisterID) %>%
+  summarise(comps_ps_av = mean(comps_ps, na.rm = TRUE))
+colnames(registers_comps_3) = c("RegisterID", "comps_ps_av")
+
+## now, add the further values: minimum, maximum, standard deviation
+registers_comps_3$comps_ps_min = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     min(comps_ps, na.rm = TRUE)), 2)
+registers_comps_3$comps_ps_max = pull(summarise(group_by(texts_all, RegisterID), 
+                                                     max(comps_ps, na.rm = TRUE)), 2)
+registers_comps_3$comps_ps_sd = pull(summarise(group_by(texts_all, RegisterID), 
+                                                    sd(comps_ps, na.rm = TRUE)), 2)
+```
+
+```{r combine}
+registers_comps01 = left_join(registers_comps_0, registers_comps_1, by = "RegisterID")
+registers_comps012 = left_join(registers_comps01, registers_comps_2, by = "RegisterID")
+registers_comps = left_join(registers_comps012, registers_comps_3, by = "RegisterID")
+
+## add this to existing register table
+registers = left_join(registers, registers_comps, by = c("RegisterID"))
+```
+
+##3.8 Write new tables to file
+
+```{r}
+## this command does not need to be run (I already created and saved this file)
+#write_xlsx(registers, path = "~/Uni/03_PhD/Data/GECCo/Overview_registers_vp.xlsx")
+```
+
+
+
+
+

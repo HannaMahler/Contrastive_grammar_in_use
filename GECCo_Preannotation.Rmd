@@ -1,0 +1,1153 @@
+---
+title: "GECCo_Preannotation"
+author: "Hanna Mahler"
+date: "9 9 2021"
+output: html_document
+---
+
+This script pre-sorts and pre-annotates the items that were extracted from the corpus as potentially verbal. 
+No other script needs to be run in order for this script to work.
+The only necessary pre-requisites are the txt-files extracted from the corpus (for ADJ, VERB and AUX). *Due to copyright reasons I am unfortunately not allowed to make these files publicly available, but I can provide a copy to interested researchers.*
+
+#1. Load libraries
+
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(stringr)
+```
+
+
+#2. Read in messy data sets
+
+##2.1 File with full verbs
+
+Read in the files containing everything tagged as VERB (full verbs).
+Problems that occur when reading in those files have been addressed by using quote = "" for read.delim and the Encoding-specification for the German special characters.
+*Due to copyright reasons I am unfortunately not allowed to make these files publicly available, but I can provide a copy to interested researchers.*
+
+```{r}
+## for English
+VERB_EO_messy = read.delim("Concordances/tabulation_EO_VERB_all.txt", quote = "")
+colnames(VERB_EO_messy) = c("NR", "Text_id", "Language", "mode", "register", "item", "lemma", "UPOS_tag", "POS_tag", "context_before", "context_after", "prev_item", "prev_UPOS_tag", "prev_POS_tag", "prev_lemma", "next_item", "next_UPOS_tag", "next_POS_tag", "next_lemma", "next2_UPOS_tag", "next2_POS_tag")
+head(VERB_EO_messy)
+
+## for German
+VERB_GO_messy = read.delim("Concordances/tabulation_GO_VERB_all.txt", quote = "")
+colnames(VERB_GO_messy) = c("NR", "Text_id", "Language", "mode", "register", "item", "lemma", "UPOS_tag", "POS_tag", "context_before", "context_after", "prev_item", "prev_UPOS_tag", "prev_POS_tag", "prev_lemma", "next_item", "next_UPOS_tag", "next_POS_tag", "next_lemma", "next2_UPOS_tag", "next2_POS_tag")
+
+### the following commands are necessary to ensure that the German umlauts are rendered correctly
+### Note: in the view() display the characters are still displayed incorrectly, despite being rendered properly in the head() display
+for (i in c("item", "lemma", "prev_item", "prev_lemma", "next_lemma", "next_item", "context_before", "context_after")) {
+  Encoding(VERB_GO_messy[ ,i]) <- "UTF-8"
+}
+
+head(VERB_GO_messy)
+```
+
+
+
+##2.2 File with auxiliary verbs
+
+Read in the file with the auxiliaries.
+In order to limit this list to only modal and primary verbs functioning as main verbs (which is what I want in order to get all verb phrases), further sorting needs to happen below to mark everything that is part of another verb phrase as "auxiliary" and all main verbs as "main".
+*Due to copyright reasons I am unfortunately not allowed to make these files publicly available, but I can provide a copy to interested researchers.*
+
+The AUX_EO_messy file contains the following verbs only: be, can, could, have, may, might, must, need, ought, shall, should, will, would
+The AUX_GO_messy file contains the following verbs only: dürfen, haben, können, mögen, müssen, sein, sollen, werden, wollen
+```{r}
+## for English
+AUX_EO_messy = read.delim("Concordances/tabulation_EO_AUX_all.txt", quote = "")
+colnames(AUX_EO_messy) = c("NR", "Text_id", "Language", "mode", "register", "item", "lemma", "UPOS_tag", "POS_tag", "context_before", "context_after", "prev_item", "prev_UPOS_tag", "prev_POS_tag", "prev_lemma", "next_item", "next_UPOS_tag", "next_POS_tag", "next_lemma", "next2_UPOS_tag", "next2_POS_tag")
+head(AUX_EO_messy)
+
+## for German
+AUX_GO_messy = read.delim("Concordances/tabulation_GO_AUX_all.txt", quote = "")
+colnames(AUX_GO_messy) = c("NR", "Text_id", "Language", "mode", "register", "item", "lemma", "UPOS_tag", "POS_tag", "context_before", "context_after", "prev_item", "prev_UPOS_tag", "prev_POS_tag", "prev_lemma", "next_item", "next_UPOS_tag", "next_POS_tag", "next_lemma", "next2_UPOS_tag", "next2_POS_tag")
+
+### the following commands are necessary to ensure that the German umlauts are rendered correctly
+### Note: in the view() display the characters are still displayed incorrectly, despite being rendered properly in the head() display
+for (i in c("item", "lemma", "prev_item", "prev_lemma", "next_lemma", "next_item", "context_before", "context_after")) {
+  Encoding(AUX_GO_messy[ ,i]) <- "UTF-8"
+}
+
+head(AUX_GO_messy)
+```
+
+
+##2.3 File with adjectives
+
+Read in the file with the adjectives. *Due to copyright reasons I am unfortunately not allowed to make these files publicly available, but I can provide a copy to interested researchers.*
+In order to limit this list to only German present and past participles in verb phrases, further sorting needs to happen below to mark verbal uses as "main" and all other instances as "adjectival".
+This procedure is not necessary for English, since English past and present participles appear to be tagged appropriately as VERB. The ADJ tag therefore doesn't need to be considered.
+```{r}
+## for German
+ADJ_GO_messy = read.delim("Concordances/tabulation_GO_ADJ_all.txt", quote = "")
+colnames(ADJ_GO_messy) = c("NR", "Text_id", "Language", "mode", "register", "item", "lemma", "UPOS_tag", "POS_tag", "context_before", "context_after", "prev_item", "prev_UPOS_tag", "prev_POS_tag", "prev_lemma", "next_item", "next_UPOS_tag", "next_POS_tag", "next_lemma", "next2_UPOS_tag", "next2_POS_tag")
+
+### the following commands are necessary to ensure that the German umlauts are rendered correctly
+### Note: in the view() display the characters are still displayed incorrectly, despite being rendered properly in the head() display
+for (i in c("item", "lemma", "prev_item", "prev_lemma", "next_lemma", "next_item", "context_before", "context_after")) {
+  Encoding(ADJ_GO_messy[ ,i]) <- "UTF-8"
+}
+
+head(ADJ_GO_messy)
+```
+
+
+#3. Pre-processing and pre-annotation
+
+In this step, the data frames receive their automatic pre-annotation. 
+
+##3.1 Preparation of files
+
+Adding the necessary colums
+```{r add columns VERB}
+VERB_EO <- VERB_EO_messy
+VERB_GO <- VERB_GO_messy
+
+## add columns for finiteness, verb form etc.
+VERB_EO[, "type"] <- "main"
+VERB_EO[, "finiteness"] <- "unknown"
+VERB_EO[, "verb_form"] <- "unknown"
+VERB_EO[, "sentence_position"] <- "unknown"
+VERB_EO[, "clause_type"] <- "unknown"
+VERB_EO[, "nomclause_function"] <- "unknown"
+VERB_EO[, "overt_subject"] <- "no" #this will be the default
+VERB_EO[, "other"] <- "unknown"
+
+VERB_GO[, "type"] <- "main"
+VERB_GO[, "finiteness"] <- "finite" # this will be the default
+VERB_GO[, "verb_form"] <- "unknown"
+VERB_GO[, "sentence_position"] <- "unknown"
+VERB_GO[, "clause_type"] <- "unknown"
+VERB_GO[, "nomclause_function"] <- "unknown"
+VERB_GO[, "overt_subject"] <- "no" # this will be the default
+VERB_GO[, "other"] <- "unknown"
+### I am using "unknown" here instead of "NA" because I later use if-statements on these columns and these if-statements won't work while there are NAs in the column.
+```
+
+```{r add columns AUX}
+AUX_EO <- AUX_EO_messy
+AUX_GO <- AUX_GO_messy
+
+AUX_EO[, "type"] <- "auxiliary"
+AUX_EO[, "finiteness"] <- "unknown"
+AUX_EO[, "verb_form"] <- "unknown"
+AUX_EO[, "sentence_position"] <- "unknown"
+AUX_EO[, "clause_type"] <- "unknown"
+AUX_EO[, "nomclause_function"] <- "unknown"
+AUX_EO[, "overt_subject"] <- "unknown"
+AUX_EO[, "other"] <- "unknown"
+
+AUX_GO[, "type"] <- "auxiliary"
+AUX_GO[, "finiteness"] <- "finite" ## this is the default, but not the exclusive value!
+## German auxiliary verbs are usually finite (see König & Gast 2012: 105), but there are exceptions: haben/sein/werden can also be used as participles (zum Monster werdend, einen Anfall habend), but others can also be used as zu-infinitives: ein Eis zu wollen, Nach hause zu dürfen.
+AUX_GO[, "verb_form"] <- "unknown"
+AUX_GO[, "sentence_position"] <- "unknown"
+AUX_GO[, "clause_type"] <- "unknown"
+AUX_GO[, "nomclause_function"] <- "unknown"
+AUX_GO[, "overt_subject"] <- "unknown"
+AUX_GO[, "other"] <- "unknown"
+### I am using "unknown" here instead of "NA" because I later use if-statements on these columns and these if-statements won't work while there are NAs in the column.
+```
+
+```{r add columns ADJ}
+ADJ_GO <- ADJ_GO_messy
+
+## add columns for finiteness, verb form etc.
+ADJ_GO[, "type"] <- "non-verbal" # this will be the default
+ADJ_GO[, "finiteness"] <- "unknown"
+ADJ_GO[, "verb_form"] <- "unknown"
+ADJ_GO[, "sentence_position"] <- "unknown"
+ADJ_GO[, "clause_type"] <- "unknown"
+ADJ_GO[, "nomclause_function"] <- "unknown"
+ADJ_GO[, "overt_subject"] <- "no" # this will be the default
+ADJ_GO[, "other"] <- "unknown"
+### I am using "unknown" here instead of "NA" because I later use if-statements on these columns and these if-statements won't work while there are NAs in the column.
+```
+
+Put relevant columns in lower case
+```{r lowercase}
+# for English, AUX and VERB
+for (i in c("item", "lemma", "prev_item", "prev_lemma", "next_lemma", "next_item", "context_before", "context_after")) {
+  VERB_EO[ ,i] <- tolower(VERB_EO[ ,i])
+  AUX_EO[ ,i] <- tolower(AUX_EO[ ,i])
+}
+
+# for German, AUX, ADJ, and VERB
+for (i in c("item", "lemma", "prev_item", "prev_lemma", "next_lemma", "next_item", "context_before", "context_after")) {
+  VERB_GO[ ,i] <- tolower(VERB_GO[ ,i])
+  AUX_GO[ ,i] <- tolower(AUX_GO[ ,i])
+  ADJ_GO[ ,i] <- tolower(ADJ_GO[ ,i])
+}
+
+head(VERB_GO, n = 10)
+head(AUX_GO, n = 10)
+head(ADJ_GO, n = 10)
+
+head(VERB_EO, n = 10)
+head(AUX_EO, n = 10)
+```
+
+
+##3.2 Separate steps for VERB and AUX
+
+###3.2.1 VERB
+
+All instances of DO (whether in auxiliary or main verb function) are included in the VERB data frame. I therefore need to further sort the hits for DO in VERB into type "auxiliary" and "main". I ultimately only want the "main" ones.
+
+```{r English}
+## if next_item == "n't" and next2_UPOS_tag == "VERB", put type = "auxiliary" (I don't know)
+for (line in 1:nrow(VERB_EO)) {
+  if (VERB_EO[line, "lemma"] == "do") {
+    if (VERB_EO[line, "next_item"] == "n't" || VERB_EO[line, "next_item"] == "not") {
+        VERB_EO[line, "type"] <- "auxiliary"
+    } else {}
+  } else {}
+  }
+
+## if next_UPOS_tag == personal pronoun and next2_UPOS_tag == "VERB", put type = "auxiliary (do you know, how long do you sleep)
+for (line in 1:nrow(VERB_EO)) {
+  if (VERB_EO[line, "lemma"] == "do") {
+    if (VERB_EO[line, "next_UPOS_tag"] == "PRON" && VERB_EO[line, "next2_UPOS_tag"] == "VERB") {
+      VERB_EO[line, "type"] <- "auxiliary"
+    } else {}
+  } else {}
+  }
+
+## if next_UPOS_tag == "VERB", put type = "auxiliary" (they do know)
+for (line in 1:nrow(VERB_EO)) {
+  if (VERB_EO[line, "lemma"] == "do") {
+    if (VERB_EO[line, "next_UPOS_tag"] == "VERB") {
+      VERB_EO[line, "type"] <- "auxiliary"
+    } else {}
+  } else {}
+  }
+
+### sort out items that I want to classify as deverbal prepositions or conjunctions 
+## if item in prepositions_E, put type = non-verbal
+prepositions_E = c("according", "assuming", "bar", "barring", "concerning", "considering", "excepting", "excluding", "facing", "failing", "following", "given", "including", "owing", "pending", "regarding", "seeing")
+
+for (line in 1:nrow(VERB_EO)) {
+  if (VERB_EO[line, "item"] %in% prepositions_E) {
+    VERB_EO[line, "type"] <- "non-verbal"
+  } else {}
+}
+
+```
+
+```{r German}
+### sort out items that I want to classify as deverbal prepositions or conjunctions 
+## if item in prepositions_G, put type = non-verbal
+prepositions_G = c("entsprechend", "betreffend", "abgesehen", "ungeachtet", "unbeschadet", "während", "angenommen", "gesetzt", "geschweige", "ausgenommen")
+
+for (line in 1:nrow(VERB_GO)) {
+  if (VERB_GO[line, "item"] %in% prepositions_G) {
+    VERB_GO[line, "type"] <- "non-verbal"
+  } else {}
+}
+
+```
+
+
+###3.2.2 AUX
+
+In this step I want to distinguish between main verbs (which I want) and auxiliary verbs (which will later be discarded). The  default value for "type" that I set above is "auxiliary" in both the English and German data frame.
+
+In English, modal verbs can never be the head of verb phrases. Only the primary verbs BE, DO and HAVE are candidates for main verbs.
+I will leave the modal verbs in the data frame, marked as "auxiliary".
+
+In German, all modal verbs can theoretically also serve as main verbs (although some only marginally). I therefore cannot exclude any lemmata categorically. 
+
+The *broad approach* would be to tag everything as "main" that is not accompanied by a full verb. The *narrow* approach would be to tag only those rows as "main" that show a certain construction in which they are likely so serve main verb function.
+
+```{r English}
+## broad approach:
+for (line in 1:nrow(AUX_EO)) {
+  if (AUX_EO[line, "lemma"] %in% c("be", "have")) { ## for some reason all instances of "do" are tagged as VERB not AUX
+    if (AUX_EO[line, "next_UPOS_tag"] != "VERB" && AUX_EO[line, "next_UPOS_tag"] != "AUX") {
+      AUX_EO[line, "type"] <- "main"
+    } else {} 
+  } else {}
+}
+## this should be accurate in the majority of cases, but:
+## this ignores inverted structures like "are you ready to go?" and structures with inserted adverbials/negators within the verb phrase
+
+#View(arrange(select(AUX_EO, item, lemma, context_before, context_after, type), item))
+```
+
+German verbs that can be part of one large finite verb phrase: 
+haben, sein, werden, bekommen, kommen, gehören, erhalten, kriegen + past participle
+werden, dürfen, können, mögen, müssen, sollen, wollen, brauchen, tun, bleiben + bare infinitive
+
+
+```{r German}
+## narrow approach:
+
+## if a prepositional phrase follows, put "type" <- "main" (e.g. Ich darf nach Hause)
+for (line in 1:nrow(AUX_GO)) {
+  if (AUX_GO[line, "next_POS_tag"] == "APPR") { ## APPR is the German tag for preposition / left circumposition
+    AUX_GO[line, "type"] <- "main"
+  } else {}
+} ## this will not lead to perfect precision (e.g. "kann zu Schäden führen", "sollten durch Arbeiten Schäden entstehen")
+
+## if next_POS_tag == (adjective) and lemma = SEIN/WERDEN, put "type" <- "main"
+for (line in 1:nrow(AUX_GO)) {
+  if ((AUX_GO[line, "next_UPOS_tag"] == "ADJ") && (AUX_GO[line, "lemma"] %in% c("sein", "werden"))) {
+    if (AUX_GO[line, "next2_UPOS_tag"] != "VERB") {
+      AUX_GO[line, "type"] <- "main"
+    } else {}
+  } else {}
+} ## this will not lead to perfect precision (e.g. es werden wirklich viele Rekorde aufgestellt, ich bin echt viel gelaufen) 
+
+## if prev_POS_tag == (adjective) and lemma = SEIN/WERDEN, put "type" <- "main" (dass es ihnen egal ist, spätestens seitdem klar ist, ich soll brav sein)
+for (line in 1:nrow(AUX_GO)) {
+  if (AUX_GO[line, "prev_UPOS_tag"] == "ADJ" && AUX_GO[line, "lemma"] %in% c("sein", "werden")) {
+    AUX_GO[line, "type"] <- "main"
+  } else {}
+} 
+
+#View(arrange(select(AUX_GO, item, lemma, context_before, context_after, type), item))
+```
+
+
+
+###3.2.3 ADJ
+
+In this step I first want to select all present and past participles (and disregard other adjectives). 
+Subsequently, I need to distinguish between verbal and adjectival uses of the participles (verbal when there are further constituents).
+
+```{r German}
+## select present participles via the letters at the end of the words
+for (line in 1:nrow(ADJ_GO)) {
+  if (endsWith(ADJ_GO[line, "item"], "end") || endsWith(ADJ_GO[line, "item"], "ende") || endsWith(ADJ_GO[line, "item"], "enden")) {
+    if ((ADJ_GO[line, "prev_UPOS_tag"] != "DET") && (ADJ_GO[line, "prev_UPOS_tag"] != "ADP")) {
+      ## exlude structures in which the participle is preceded by an determiner or preposition, since in these cases there is clearly no additional constituent (in ausgestreckte Arme, der anhaltende Rausch)
+      ADJ_GO[line, "verb_form"] <- "participle_present"
+      ADJ_GO[line, "type"] <- "main"
+      ADJ_GO[line, "finiteness"] <- "non-finite"
+      } else {}
+  } else {}
+}
+
+adjectivelist = c("gut", "weit", "direkt", "weltweit", "alt", "recht", "leicht", "groß", "interessant", "schlecht", "erst", "erneut", "echt", "fest", "unbedingt", "klein", "offen", "selten", "absolut", "deutsch", "neu", "hoch", "bereit", "wichtig", "konkret", "letzt", "europäisch", "international", "hart", "kalt", "dritt", "laut", "zweit", "ernst", "konsequent", "nett", "zufrieden", "politisch", "unterschiedlich", "breit", "einzeln", "komplett", "schön", "spät", "lang", "perfekt", "privat", "rot", "wirtschaftlich", "kulturell", "mittler", "schlicht", "sozial", "dauerhaft", "doppelt", "eigen", "lieb", "nah", "elegant", "jung", "schwierig", "öffentlich", "zentral", "möglich", "notwendig", "ernsthaft", "erfolgreich", "gemeinsam", "implizit", "kaputt", "kompetent", "positiv", "stark", "trocken", "zart", "ganz", "frei", "acht", "feucht", "fit", "korrekt", "glatt", "sanft", "relevant", "nackt", "modern", "abstrakt", "amerikanisch", "ausländisch", "operativ", "permanent", "dicht", "exakt", "gelb", "gesund", "präsent", "vornehm", "unbewusst", "technisch", "satt", "regional", "gleich", "bunt", "verfügbar", "intakt", "motorisch", "niedrig", "kurz", "sensomotorischen", "effizient", "gesellschaftlich", "wissenschaftlich", "explizit", "fünft", "halb", "konstant", "amnestischen", "deutlich", "einfach", "elektrisch", "englisch", "europaweit", "gesamt")
+
+## select past participlesvia the letters at the end of the words
+for (line in 1:nrow(ADJ_GO)) {
+  if (endsWith(ADJ_GO[line, "item"], "en") || endsWith(ADJ_GO[line, "item"], "t") || endsWith(ADJ_GO[line, "item"], "te")) {
+    if (ADJ_GO[line, "prev_UPOS_tag"] %in% c("DET", "ADP") || (ADJ_GO[line, "lemma"] %in% adjectivelist)) {
+      ## exlude structures in which the participle is preceded by an determiner or preposition, since in these cases there is clearly no additional consituent (in ausgestreckte Arme, der anhaltende Rausch)
+      ## exclude items that are clearly not participles (listed in the adjectivelist)
+        ADJ_GO[line, "type"] <- "non-verbal"
+      } else {
+        ADJ_GO[line, "verb_form"] <- "participle_past"
+        ADJ_GO[line, "type"] <- "main"
+        ADJ_GO[line, "finiteness"] <- "non-finite"
+      }
+  } else {
+  }
+}
+
+### sort out items that I want to classify as deverbal prepositions or conjunctions 
+## if item in prepositions_G, put type = non-verbal
+prepositions_G = c("entsprechend", "betreffend", "abgesehen", "ungeachtet", "unbeschadet", "während", "angenommen", "gesetzt", "geschweige", "ausgenommen")
+
+for (line in 1:nrow(ADJ_GO)) {
+  if (ADJ_GO[line, "item"] %in% prepositions_G) {
+    ADJ_GO[line, "type"] <- "non-verbal"
+  } else {}
+}
+
+summary(as.factor(ADJ_GO$verb_form))
+#View(arrange(select(ADJ_GO, item, lemma, context_before, context_after, type, verb_form), item))
+```
+
+
+
+##3.3 Combining VERB, ADJ, and AUX into one file
+
+##3.4 Annotation for joint file
+I annotate everything, whether it is tagged as "main" or "auxiliary". This is because I will later manually check whether the "auxiliary" value is justified. If it is, the additional annotation is irrelevant. If it isn't (and we are in fact dealing with a main verb), then the annotation I need is there. I only need to be careful later on when reading in the cleaned file to subset to main verbs only.
+
+```{r combine files}
+vp_GO = bind_rows(VERB_GO, AUX_GO, ADJ_GO)
+vp_EO = bind_rows(VERB_EO, AUX_EO)
+```
+
+Some of these conditions will be too limited, some will be too broad (i.e. tag items as finite/non-finite that should not receive this tag). That is ok. I will critical classes of items manually afterwards to make sure the automatic tag is correct.
+
+*Careful! Running this code (especially the for-loops) takes some time!*
+
+###3.4.0 Step 0: Sorting of auxiliary verb, main verbs, and intermediate verbs
+
+For English, I defined a category of "intermediate verbs", which consist of semi-auxiliaries, modal idioms, and catenatives. I need to find all of them and label them with their verb class in the column "other"  so that I can later count them in or not count them in. For the variable "type" all these intermediate verbs should receive the label "main" and for "finiteness" the label "finite". 
+- modal idioms: had better, would rather, be to, have got to + bare infinitive
+- semi-auxiliaries: 
+  - with HAVE: have to
+  - with BE: be about to, be able to, be bound to, be going to, be obliged to, be supposed to, 
+    be willing to, be likely to, be due to, be meant to (be apt to does not occur in the data)
+- catenatives: 
+  - with infinitive: appear to, happen to, come to, fail to, get to, manage to, tend to, turn out to, seem to
+  - with participles: get + past participle, keep + present participle
+
+In some of these cases, both items will be tagged as verbal (e.g. was_AUX supposed_VERB to), in others only the first item will be tagged as verbal (e.g. I was_AUX able_ADJ to, was_AUX about_ADV to). In case of two verbal tags I do not want to code both within the OTHER column, since that would later distort the number of intermediate verbs. I therefore need to separate between these two cases.
+
+```{r English}
+## modal idioms
+# had better, have got to
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "lemma"] == "have") {
+    if (vp_EO[line, "next_item"] == "better" || vp_EO[line, "next_item"] == "got") {
+      vp_EO[line, "other"] <- "modal_idiom"
+      vp_EO[line, "finiteness"] <- "finite"
+      vp_EO[line, "type"] <- "main"
+    } else {}
+  } else {}
+}
+
+# would rather
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "item"] == "would") {
+    if (vp_EO[line, "next_item"] == "rather") {
+      vp_EO[line, "other"] <- "modal_idiom"
+      vp_EO[line, "finiteness"] <- "finite"
+      vp_EO[line, "type"] <- "main"
+    } else {}
+  } else {}
+}
+
+# be to
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "lemma"] == "be") {
+    if (vp_EO[line, "next_item"] == "to") {
+      vp_EO[line, "other"] <- "modal_idiom"
+      vp_EO[line, "finiteness"] <- "finite"
+      vp_EO[line, "type"] <- "main"
+    } else {}
+  } else {}
+}
+
+## semi-auxiliaries including BE with following ADJ (BE therefore finite main verb and the "anchor" for the other-column)
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "lemma"] == "be") {
+    if (startsWith(vp_EO[line, "context_after"], "about to")  ## "about" tagged as ADV
+        || startsWith(vp_EO[line, "context_after"], "able to")  ## "able" tagged as ADJ
+        || startsWith(vp_EO[line, "context_after"], "due to") ## "due" tagged as ADJ
+        || startsWith(vp_EO[line, "context_after"], "likely to") ## "likely" tagged as ADJ
+        || startsWith(vp_EO[line, "context_after"], "willing to")) { ## "willing" tagged as ADJ
+      vp_EO[line, "other"] <- "semi-auxiliary"
+      vp_EO[line, "finiteness"] <- "finite"
+      vp_EO[line, "type"] <- "main"
+    } else {}
+  } else {}
+}
+
+## semi-auxiliaries including BE with following VERB (BE therefore auxiliary and not the "anchor" for the other-column)
+# supposed to, obliged to, bound to, meant to, going to
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "lemma"] == "be") {
+    if (startsWith(vp_EO[line, "context_after"], "supposed to")  ## "supposed" tagged as VERB
+        || startsWith(vp_EO[line, "context_after"], "obliged to")  ## "obliged" tagged as VERB
+        || startsWith(vp_EO[line, "context_after"], "bound to") ## "bound" tagged as VERB
+        || startsWith(vp_EO[line, "context_after"], "meant to") ## "meant" tagged as VERB
+        || startsWith(vp_EO[line, "context_after"], "going to")) { ## "going" tagged as VERB
+      vp_EO[line, "type"] <- "auxiliary"
+    } else {}
+  } else {}
+}
+
+semi_aux_verbs =  c("supposed", "obliged", "bound", "meant", "going")
+
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "item"] %in% semi_aux_verbs) {
+    if ((vp_EO[line, "prev_lemma"] == "be") && (vp_EO[line, "next_lemma"] == "to")) {
+      vp_EO[line, "other"] <- "semi-auxiliary"
+      vp_EO[line, "finiteness"] <- "finite"
+      vp_EO[line, "type"] <- "main"
+    } else {}
+  } else {}
+}
+
+## semi-auxiliary "have to"
+for (line in 1:nrow(vp_EO)) {
+  if ((vp_EO[line, "lemma"] == "have") && (vp_EO[line, "next_lemma"] == "to")) {
+    vp_EO[line, "other"] <- "semi-auxiliary"
+    vp_EO[line, "finiteness"] <- "finite"
+    vp_EO[line, "type"] <- "main"
+  } else {}
+}
+
+## catenatives with infinitives (appear to, happen to, come to, fail to, get to, manage to, tend to, turn out to, seem to)
+catenative_verbs = c("appear", "happen", "come", "fail", "get", "manage", "tend", "seem")
+
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "lemma"] %in% catenative_verbs) {
+    if (vp_EO[line, "next_lemma"] == "to") {
+      vp_EO[line, "other"] <- "catenative"
+      vp_EO[line, "finiteness"] <- "finite"
+      vp_EO[line, "type"] <- "main"
+    } else {}
+  } else {}
+}
+
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "lemma"] == "turn") {
+    if (vp_EO[line, "next_lemma"] == "out" && vp_EO[line, "next2_POS_tag"] == "TO") {
+      vp_EO[line, "other"] <- "catenative"
+      vp_EO[line, "finiteness"] <- "finite"
+      vp_EO[line, "type"] <- "main"
+    } else {}
+  } else {}
+}
+
+## catenatives with participles
+# get + past participle
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "lemma"] == "get") {
+    if (vp_EO[line, "next_POS_tag"] == "VVN") {
+      vp_EO[line, "other"] <- "catenative"
+      vp_EO[line, "finiteness"] <- "finite"
+      vp_EO[line, "type"] <- "main"
+    } else {}
+  } else {}
+}
+
+# keep + present participle
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "lemma"] == "keep") {
+    if (vp_EO[line, "next_POS_tag"] == "VVG") {
+      vp_EO[line, "other"] <- "catenative"
+      vp_EO[line, "finiteness"] <- "finite"
+      vp_EO[line, "type"] <- "main"
+    } else {}
+  } else {}
+}
+```
+
+For German, a similar classification needs to take place.
+- Some verbs are considered auxiliaries
+- Some verbs are considered main verbs
+  - verbs of perception and verbs of causation followed by the bare infinitive: these are nearly impossible to catch automatically, since the infinitive is several items after the finite verb (e.g. "hörten_VVFIN seinen Strahl ins Becken plätschern"), but I assume that these will be counted as finite main verbs anyway.
+- and some verbs are intermediate, but these, again, cannot really be coded automatically.
+
+```{r German}
+## auxiliary verbs (labelled auxiliaries)
+G_aux = c("haben", "sein", "werden", "bekommen", "kommen", "gehören", "erhalten", "kriegen")
+
+for (line in 1:nrow(vp_GO)) {
+  if (vp_GO[line, "lemma"] %in% G_aux) {
+    if ((vp_GO[line, "next_POS_tag"] == "VVPP") || (vp_GO[line, "next2_POS_tag"] == "VVPP") || (vp_GO[line, "prev_POS_tag"] == "VVPP")) {
+      vp_GO[line, "type"] <- "auxiliary"
+    } else {}
+  } else {}
+}
+
+## modals verbs (labelled auxiliaries): werden, dürfen, können, mögen, müssen, sollen, wollen, brauchen, tun, bleiben + bare infinitive
+## were already sorted above, see steps for the AUX-file (since these are all the verbs wihtin the AUX-file)
+
+## others verb groups do not lend themselves to automatic identification
+
+```
+
+
+
+###3.4.1 Step 1: Assigning verb form and finiteness
+```{r English}
+# assign finite to all 3rd person forms (VVZ, VBZ, VHZ)
+# assign finite to all base forms ("VV", "VB", "VH") (in the next steps all base forms preceded by "to" are singled out)
+# assign finite to all simple past forms (VVD, VBD, VHD)
+# assign finite to non-3rd person singular present (VVP, VBP, VHP)
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "POS_tag"] %in% c("VVZ", "VBZ", "VHZ", "VV", "VB", "VH", "VVD", "VBD", "VHD", "VVP", "VBP", "VHP")) {
+    vp_EO[line, "finiteness"] <- "finite"
+  } else {}
+}
+
+#if item-1 is a modal verb (can, could, will, would, must, shall, should), put "finite"
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "prev_item"] == "MD") {
+    vp_EO[line, "finiteness"] <- "finite"
+  } else {}
+} 
+
+# assign non-finite and to-infinitive to all base forms preceded by "to"
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "prev_item"] == "to"){
+    if (vp_EO[line, "POS_tag"] %in% c("VV", "VB", "VH")) {
+      vp_EO[line, "finiteness"] <- "non-finite"
+      vp_EO[line, "verb_form"] <- "infinitive_to"
+    } else {}
+  } else {}
+} 
+
+# bare infinitive
+for (line in 1:nrow(vp_EO)) {
+  if ((vp_EO[line, "prev_item"] != "to") && (vp_EO[line, "POS_tag"] %in% c("VV", "VB", "VH"))){
+    ## exclude everthing that is preceded by "to", verb must be in the base form (VV, VB, VH)
+    ## exclude everything preceded by a modal or auxiliary (since these will be part of finite verb phrases)
+    if (vp_EO[line, "prev_UPOS_tag"] != "AUX") { 
+      vp_EO[line, "finiteness"] <- "non-finite"
+      vp_EO[line, "verb_form"] <- "infinitive_bare"
+    } else {}
+  } else {}
+} 
+
+# assign finite to all present participle forms if 
+# - item-1 is a form of BE and POS_tag == VVG (or endsWith ing) put "finite" (I am running, I was joking)
+# - else: put "non-finite"
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "POS_tag"] %in% c("VVG", "VBG", "VHG")){
+    if (vp_EO[line, "prev_lemma"] == "be") {
+      vp_EO[line, "finiteness"] <- "finite" ### this will also exclude ing-clauses as objects (the problem is [getting to the house])
+    } else {
+      vp_EO[line, "finiteness"] <- "non-finite"
+      vp_EO[line, "verb_form"] <- "participle_present"
+    }
+  } else {}
+} 
+
+# for ed-forms: if item-1 is a form of HAVE or BE put "finite", else put "non-finite"
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "POS_tag"] %in% c("VVN", "VBN", "VHN")){ ## select only past participles
+    if (vp_EO[line, "prev_lemma"] %in% c("be", "have")) {
+      vp_EO[line, "finiteness"] <- "finite" ## this will incorrectly tag some non-finite hits as finite ("Being written by him, it...", "Having been to the store, ...")
+    } else {
+      vp_EO[line, "finiteness"] <- "non-finite"
+      vp_EO[line, "verb_form"] <- "participle_past"
+    }
+  } else {}
+}
+
+#head(vp_EO, n = 30)
+View(arrange(select(vp_EO, item, lemma, context_before, context_after, type, verb_form), item))
+summary(as.factor(vp_EO$verb_form))
+```
+
+
+For German, the default value for all AUXs and VERBs is finite. So, I here only need to single out those cases which are most likely to be non-finite. This can only be done reliably for the zu-infinitive (below), and for the present participles, which are never finite (these were already tagged as non-finite in the preparatory steps for adjectives only).
+```{r German}
+# assign non-finite and to-infinitive to all base forms preceded by "zu"
+for (line in 1:nrow(vp_GO)) {
+  if (vp_GO[line, "prev_item"] == "zu" && vp_GO[line, "POS_tag"] == "VVINF") {
+    vp_GO[line, "finiteness"] <- "non-finite"
+    vp_GO[line, "verb_form"] <- "infinitive_to"
+  } else if (vp_GO[line, "POS_tag"] == "VVIZU") {
+    vp_GO[line, "finiteness"] <- "non-finite"
+    vp_GO[line, "verb_form"] <- "infinitive_to" 
+  } else {}
+} 
+
+head(vp_GO, n = 30)
+View(arrange(select(vp_GO, item, lemma, context_before, context_after, type, verb_form), item))
+summary(as.factor(vp_GO$verb_form))
+```
+
+
+###3.4.3 Step 2: Assign sentence function
+
+```{r English}
+## if "for"/"with"/"without"/"in order"/"as"/"rather than"/"sooner than"/"although"/"though"/if"/"once"/"until"/"unless"/"while"/"whether"/"when"/"where"/"whilst" in "context_before", put clause_type = "adverbial"
+for (line in 1:nrow(vp_EO)) {
+  if (str_detect(vp_EO[line, "context_before"], "with") ||
+      str_detect(vp_EO[line, "context_before"], " as ") ||
+      str_detect(vp_EO[line, "context_before"], "than") ||
+      str_detect(vp_EO[line, "context_before"], "though") ||
+      str_detect(vp_EO[line, "context_before"], " if ") ||
+      str_detect(vp_EO[line, "context_before"], "until") ||
+      str_detect(vp_EO[line, "context_before"], "unless") ||
+      str_detect(vp_EO[line, "context_before"], "while") ||
+      str_detect(vp_EO[line, "context_before"], "whether") ||
+      str_detect(vp_EO[line, "context_before"], "when") ||
+      str_detect(vp_EO[line, "context_before"], "where") ||
+      str_detect(vp_EO[line, "context_before"], "whilst") ||
+      str_detect(vp_EO[line, "context_before"], "once")) {
+    vp_EO[line, "clause_type"] <- "adverbial"
+    } else {}
+}
+
+#if the item preceding a past/present participle is a noun, the function will most likely be that of an embedded clause
+#the same holds true for to-infinitives, but here the noun is preceding the "to", not the verb itself, so I can't search for them this way (I only extracted the UPOS-tag of the item-1, not the item-2)
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "participle_past" || vp_EO[line, "verb_form"] == "participle_present") {
+    if (vp_EO[line, "prev_UPOS_tag"] == "NOUN") {
+      vp_EO[line, "clause_type"] <- "embedded"
+    } else {}
+  } else {}
+}
+
+## Prepositional complements: only present participles, can be identified via previous UPOS = ADP
+# adjectival complementation: present participles (worth waiting) and infinitives (eager to come)
+# participles in this position can easily be counted via searching for ADJ in the preceding position
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "participle_present") {
+    if ((vp_EO[line, "prev_UPOS_tag"] == "ADJ") || (vp_EO[line, "prev_UPOS_tag"] == "ADP")) {
+      vp_EO[line, "clause_type"] <- "embedded"
+    } else {}
+  } else {}
+}
+
+# for the to-infinitive this procedure is not possible, since the preceding item is to and the ADJ is one before that.
+# for the to-infinitives I can instead search the preceding context for adjectives that occur frequently in this structure (Biber et al. 1999: 716-718)
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "infinitive_to") {
+      if (str_detect(vp_EO[line, "context_before"], "likely") ||
+      str_detect(vp_EO[line, "context_before"], "able") ||
+      str_detect(vp_EO[line, "context_before"], "determined") ||
+      str_detect(vp_EO[line, "context_before"], "difficult") ||
+      str_detect(vp_EO[line, "context_before"], "due") ||
+      str_detect(vp_EO[line, "context_before"], "hard") ||
+      str_detect(vp_EO[line, "context_before"], "free") ||
+      str_detect(vp_EO[line, "context_before"], "ready") ||
+      str_detect(vp_EO[line, "context_before"], "willing") ||
+      str_detect(vp_EO[line, "context_before"], "glad") ||
+      str_detect(vp_EO[line, "context_before"], "easy")) {
+        vp_EO[line, "clause_type"] <- "embedded"
+      } else {}
+  } else {}
+}
+
+
+## if verb_form == participle_past put clause_type = "adverbial", if not a noun immediately preceding (nominals rare)
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "participle_past") {
+    if (vp_EO[line, "prev_UPOS_tag"] == "NOUN") {
+      vp_EO[line, "clause_type"] <- "embedded"
+    } else {
+      vp_EO[line, "clause_type"] <- "adverbial"
+      }
+  } else {}
+}
+
+## if verb_form == infinitive (bare) put clause_type = "nominal" (embedded clauses not possible and adverbials rare)
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "infinitive_bare") {
+    vp_EO[line, "clause_type"] <- "nominal"
+  } else {}
+}
+
+# Biber et al. (1999: 659) list main clause verbs that can control past participle clauses as nominal clauses. 
+for (line in 1:nrow(vp_EO)) {
+  if (str_detect(vp_EO[line, "context_before"], "got") ||
+      str_detect(vp_EO[line, "context_before"], "had") ||
+      str_detect(vp_EO[line, "context_before"], "want") ||
+      str_detect(vp_EO[line, "context_before"], "used") ||
+      str_detect(vp_EO[line, "context_before"], "see") ||
+      str_detect(vp_EO[line, "context_before"], "hear")) {
+      if (vp_EO[line, "verb_form"] == "participle_past") {
+        vp_EO[line, "clause_type"] <- "nominal"
+      } else {}
+  } else {}
+}
+
+# Biber et al. (1999: 631) list lemmata that are especially associated with embedded (past and present) participle clauses and that occur only infrequently in other positions. They can be used to identify embedded clauses
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "participle_past" || vp_EO[line, "verb_form"] == "participle_present") {
+    if (vp_EO[line, "prev_UPOS_tag"] == "NOUN") {
+      if (vp_EO[line, "item"] %in% c("being", "containing", "using", "concerning", "having", "involving", "based", "given", "used", "caused", "concerned", "made", "obtained", "produced", "taken", "arising", "consisting", "corresponding", "relating", "requiring", "resulting")) {
+        vp_EO[line, "clause_type"] <- "embedded"
+      } else {}
+    } else {}
+  } else {}
+}
+
+# Biber et al. (1999: 633) list lemmata that are especially common as head nouns for embedded to-infinitive clauses.
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "infinitive_to") {
+      if (str_detect(vp_EO[line, "context_before"], "time") ||
+      str_detect(vp_EO[line, "context_before"], "thing") ||
+      str_detect(vp_EO[line, "context_before"], "place") ||
+      str_detect(vp_EO[line, "context_before"], "stuff") ||
+      str_detect(vp_EO[line, "context_before"], "lot") ||
+      str_detect(vp_EO[line, "context_before"], "way")) {
+        vp_EO[line, "clause_type"] <- "embedded"
+      } else {}
+  } else {}
+}
+
+## if verb_form == participle_present and prev_UPOS_tag == "VERB" put clause_type = "nominal" (Biber et al. 1999: 740 say that most ing-nominal clauses appear in this pattern)
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "participle_present" && vp_EO[line, "prev_UPOS_tag"] == "VERB") {
+    vp_EO[line, "clause_type"] <- "nominal"
+  } else {}
+}
+
+## Biber et al. (1999: 699) list main verbs that typically occur with nominal to-clauses
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "infinitive_to") {
+      if (str_detect(vp_EO[line, "context_before"], "want") ||
+      str_detect(vp_EO[line, "context_before"], "try") ||
+      str_detect(vp_EO[line, "context_before"], "seem") ||
+      str_detect(vp_EO[line, "context_before"], "like") ||
+      str_detect(vp_EO[line, "context_before"], "begin") ||
+      str_detect(vp_EO[line, "context_before"], "attempt") ||
+      str_detect(vp_EO[line, "context_before"], "tend")) {
+        vp_EO[line, "clause_type"] <- "nominal"
+      } else {}
+  } else {}
+}
+```
+
+```{r German}
+## There appears to be no way to reliably identify adjectival complementation with zu-infinitives (sie ist fähig, die Aufgabe zu lösen)
+
+## if verb_form == to-infinitive and "um/ohne/anstatt" in preceding context: function = adverbial
+for (line in 1:nrow(vp_GO)) {
+  if (vp_GO[line, "verb_form"] == "infinitive_to") {
+    if (str_detect(vp_GO[line, "context_before"], "um ") || str_detect(vp_GO[line, "context_before"], "ohne") || str_detect(vp_GO[line, "context_before"], "anstatt")) {
+      vp_GO[line, "clause_type"] <- "adverbial"
+    } else {}
+  } else {}
+}
+
+## if verb_form == participle_present put clause_type == "adverbial" (embedding also possible but I think less frequent)
+## if verb_form == participle_past put clause_type == "adverbial" (embedded clauses and nominal clauses also possible but I think less frequent)
+for (line in 1:nrow(vp_GO)) {
+  if (vp_GO[line, "verb_form"] == "participle_present" || vp_GO[line, "verb_form"] == "participle_past") {
+    if (vp_GO[line, "next_UPOS_tag"] == "NOUN") { ## if the following item is a noun, we are most likely dealing with a participial in pre-modifying position in the NP
+      vp_GO[line, "clause_type"] <- "embedded"
+    } else { ## all other cases probably adverbial
+      vp_GO[line, "clause_type"] <- "adverbial"
+    }
+  } else {}
+}
+
+
+## if verb_form == infinitive (bare) or infinitive_to put clause_type == "nominal" (embedded and adverbial clauses not possible or rare)
+for (line in 1:nrow(vp_GO)) {
+  if (vp_GO[line, "verb_form"] == "infinitive_bare" || vp_GO[line, "verb_form"] == "infinitive_to") {
+    vp_GO[line, "clause_type"] <- "nominal"
+  } else {}
+}
+```
+
+
+###3.4.5 Step 4: Assign presence of subject
+
+This step is only needed for English. In German, in nearly all cases there will be no explicit subject.
+```{r English}
+# if "for" in "context_before" and verb_form == to_infinitive, put "yes"
+for (line in 1:nrow(vp_EO)) {
+  if (str_detect(vp_EO[line, "context_before"], " for ") 
+      && vp_EO[line, "verb_form"] == "infinitive_to") {
+    vp_EO[line, "overt_subject"] <- "yes"
+  } else {}
+}
+
+# if possessive pronoun in previous position and verb_form == participle_present, put "overt_subject" = yes (see Biber et al. 1999: 740) e.g. "my forgetting her name"
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "participle_present") {
+    if (vp_EO[line, "prev_POS_tag"] == "PP$") {
+      vp_EO[line, "overt_subject"] <- "yes"
+    } else {}
+  } else {}
+}
+```
+
+###3.4.6 Step 5: Assign constituent type
+
+```{r English}
+
+## if clause_type == nominal and sentence-final punctuation in context_before put constituent type = subject
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "clause_type"] == "nominal") {
+    if (str_detect(vp_EO[line, "context_before"], "\\.") 
+      || str_detect(vp_EO[line, "context_before"], "\\?") 
+      || str_detect(vp_EO[line, "context_before"], "!")) {
+      vp_EO[line, "nomclause_function"] <- "subject"
+    } else {}
+  } else {}
+}
+
+## if verb_form == participle_past and clause_type == nominal put nomclause_function = object
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "clause_type"] == "nominal" && vp_EO[line, "verb_form"] == "participle_past") {
+    vp_EO[line, "nomclause_function"] <- "object"
+  } else {}
+}
+
+## if verb_form == participle_present and prev_UPOS_tag == VERB, put  nomclause_function = object (I will start reading, he hates jumping)
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "clause_type"] == "nominal" && vp_EO[line, "verb_form"] == "participle_present") {
+    if (vp_EO[line, "prev_UPOS_tag"] == "VERB") {
+      vp_EO[line, "nomclause_function"] <- "object"
+    } else {}
+  } else {}
+}
+
+## monotransitive complementation: if verb_form == infintive_to and one of these verbs (bear, desire, hate, like, love, prefer, want, wish) in the previous context, put nomclause_function = object (monotransitive complementation, e.g. I hate her to miss the train, I want you to go home)
+### subject control: if verb_form == infinitive_to and "promise" in previous context, put nomclause_function = object
+### object control: if verb_form == infinitive_to and one of these verbs (advise, appeal, appoint, ask, assist, authorize, beg, beseech, bribe, call, cause, challenge, choose, command, condemn, convince, dare, depend, direct, elect, empower, encourage, enlist, enrol, equip, entitle, forbid, force, help, hire, inspire, instruct, invite, lead, order, persuade, prepare, press, prompt, rely, require, send, teach, tell, tempt, train, trust, recommend, remind, report, request, urge, warn) in the previous context, put nomclause_function = object
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "infinitive_to") {
+    if (str_detect(vp_EO[line, "context_before"], "bear") 
+      || str_detect(vp_EO[line, "context_before"], "desire") 
+      || str_detect(vp_EO[line, "context_before"], "like")
+      || str_detect(vp_EO[line, "context_before"], "love")
+      || str_detect(vp_EO[line, "context_before"], "prefer")
+      || str_detect(vp_EO[line, "context_before"], "want")
+      || str_detect(vp_EO[line, "context_before"], "wish")
+      || str_detect(vp_EO[line, "context_before"], "promise")
+      || str_detect(vp_EO[line, "context_before"], "help")
+      || str_detect(vp_EO[line, "context_before"], "hire")
+      || str_detect(vp_EO[line, "context_before"], "inspire")
+      || str_detect(vp_EO[line, "context_before"], "instruct")
+      || str_detect(vp_EO[line, "context_before"], "invite")
+      || str_detect(vp_EO[line, "context_before"], "lead")
+      || str_detect(vp_EO[line, "context_before"], "order")
+      || str_detect(vp_EO[line, "context_before"], "persuade")
+      || str_detect(vp_EO[line, "context_before"], "train")
+      || str_detect(vp_EO[line, "context_before"], "trust")
+      || str_detect(vp_EO[line, "context_before"], "recommend")
+      || str_detect(vp_EO[line, "context_before"], "remind")
+      || str_detect(vp_EO[line, "context_before"], "report")
+      || str_detect(vp_EO[line, "context_before"], "request")
+      || str_detect(vp_EO[line, "context_before"], "urge")
+      || str_detect(vp_EO[line, "context_before"], "warn")
+      || str_detect(vp_EO[line, "context_before"], "led")
+      || str_detect(vp_EO[line, "context_before"], "prepare")
+      || str_detect(vp_EO[line, "context_before"], "press")
+      || str_detect(vp_EO[line, "context_before"], "prompt")
+      || str_detect(vp_EO[line, "context_before"], "rely")
+      || str_detect(vp_EO[line, "context_before"], "require")
+      || str_detect(vp_EO[line, "context_before"], "send")
+      || str_detect(vp_EO[line, "context_before"], "teach")
+      || str_detect(vp_EO[line, "context_before"], "tell")
+      || str_detect(vp_EO[line, "context_before"], "tempt")
+      || str_detect(vp_EO[line, "context_before"], "dare")
+      || str_detect(vp_EO[line, "context_before"], "depend")
+      || str_detect(vp_EO[line, "context_before"], "direct")
+      || str_detect(vp_EO[line, "context_before"], "elect")
+      || str_detect(vp_EO[line, "context_before"], "empower")
+      || str_detect(vp_EO[line, "context_before"], "encourage")
+      || str_detect(vp_EO[line, "context_before"], "enlist")
+      || str_detect(vp_EO[line, "context_before"], "enrol")
+      || str_detect(vp_EO[line, "context_before"], "equip")
+      || str_detect(vp_EO[line, "context_before"], "entitle")
+      || str_detect(vp_EO[line, "context_before"], "forbid")
+      || str_detect(vp_EO[line, "context_before"], "force")
+      || str_detect(vp_EO[line, "context_before"], "advise")
+      || str_detect(vp_EO[line, "context_before"], "appeal")
+      || str_detect(vp_EO[line, "context_before"], "appoint")
+      || str_detect(vp_EO[line, "context_before"], "ask")
+      || str_detect(vp_EO[line, "context_before"], "assist")
+      || str_detect(vp_EO[line, "context_before"], "authorize")
+      || str_detect(vp_EO[line, "context_before"], "authorise")
+      || str_detect(vp_EO[line, "context_before"], "beg")
+      || str_detect(vp_EO[line, "context_before"], "beseech")
+      || str_detect(vp_EO[line, "context_before"], "bribe")
+      || str_detect(vp_EO[line, "context_before"], "call")
+      || str_detect(vp_EO[line, "context_before"], "cause")
+      || str_detect(vp_EO[line, "context_before"], "challenge")
+      || str_detect(vp_EO[line, "context_before"], "choose")
+      || str_detect(vp_EO[line, "context_before"], "command")
+      || str_detect(vp_EO[line, "context_before"], "condemn")
+      || str_detect(vp_EO[line, "context_before"], "convince")
+      || str_detect(vp_EO[line, "context_before"], "hate")) {
+      vp_EO[line, "nomclause_function"] <- "object"
+      vp_EO[line, "clause_type"] <- "nominal"
+    } else {}
+  } else {}
+}
+
+## ditransitive complementation:
+# object or subject control (non-finite clause commonly functioning as OBJECT), Biber et al. (1999: 740, 695-696), König & Gast (2012: 231, 236-240), Mair (1990a: 87) 
+### object control: if verb_form == infinitive_bare and one of these verbs (let, make, feel, hear, notice, observe, overhear, see, watch, help) in the previous context, put nomclause_function = object
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "infinitive_bare") {
+    if (str_detect(vp_EO[line, "context_before"], "let") 
+      || str_detect(vp_EO[line, "context_before"], "make")
+      || str_detect(vp_EO[line, "context_before"], "feel") 
+      || str_detect(vp_EO[line, "context_before"], "hear")
+      || str_detect(vp_EO[line, "context_before"], "notice")
+      || str_detect(vp_EO[line, "context_before"], "observe")
+      || str_detect(vp_EO[line, "context_before"], "overhear")
+      || str_detect(vp_EO[line, "context_before"], "see")
+      || str_detect(vp_EO[line, "context_before"], "watch")
+      || str_detect(vp_EO[line, "context_before"], "help")
+      || str_detect(vp_EO[line, "context_before"], "saw")) {
+      vp_EO[line, "nomclause_function"] <- "object"
+      vp_EO[line, "clause_type"] <- "nominal"
+    } else {}
+  } else {}
+}
+
+### object control: if verb_form == participle_present and one of these verbs (feel, hear, notice, observe, overhear, percieve, see, smell, spot, spy, watch, catch, discover, find, leave) in the previous context, put nomclause_function = object
+## monotransitive complementation: if verb_form == participle_present and one of these verbs (bear, begrudge, detest, dislike, dread, discourage, envisage, fancy, hate, like, love, mind, forget, help, involve, justify, need, recall, miss, regret, relish, resent, stand, start, stop, recommend, remember, risk, save) in the previous context, put nomclause_function = object (e.g. I dislike you going home)
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "participle_present") {
+    if (str_detect(vp_EO[line, "context_before"], "feel") 
+      || str_detect(vp_EO[line, "context_before"], "hear")
+      || str_detect(vp_EO[line, "context_before"], "notice") 
+      || str_detect(vp_EO[line, "context_before"], "observe")
+      || str_detect(vp_EO[line, "context_before"], "overhear")
+      || str_detect(vp_EO[line, "context_before"], "percieve")
+      || str_detect(vp_EO[line, "context_before"], "see")
+      || str_detect(vp_EO[line, "context_before"], "saw")
+      || str_detect(vp_EO[line, "context_before"], "smell")
+      || str_detect(vp_EO[line, "context_before"], "spot")
+      || str_detect(vp_EO[line, "context_before"], "watch")
+      || str_detect(vp_EO[line, "context_before"], "catch")
+      || str_detect(vp_EO[line, "context_before"], "discover")
+      || str_detect(vp_EO[line, "context_before"], "find")
+      || str_detect(vp_EO[line, "context_before"], "found")
+      || str_detect(vp_EO[line, "context_before"], "left")
+      || str_detect(vp_EO[line, "context_before"], "leave")
+      || str_detect(vp_EO[line, "context_before"], "bear")
+      || str_detect(vp_EO[line, "context_before"], "begrudge")
+      || str_detect(vp_EO[line, "context_before"], "detest")
+      || str_detect(vp_EO[line, "context_before"], "like") ## will also match "dislike"
+      || str_detect(vp_EO[line, "context_before"], "love")
+      || str_detect(vp_EO[line, "context_before"], "mind")
+      || str_detect(vp_EO[line, "context_before"], "forget")
+      || str_detect(vp_EO[line, "context_before"], "help")
+      || str_detect(vp_EO[line, "context_before"], "involve")
+      || str_detect(vp_EO[line, "context_before"], "justify")
+      || str_detect(vp_EO[line, "context_before"], "need")
+      || str_detect(vp_EO[line, "context_before"], "recall")
+      || str_detect(vp_EO[line, "context_before"], "miss")
+      || str_detect(vp_EO[line, "context_before"], "regret")
+      || str_detect(vp_EO[line, "context_before"], "relish")
+      || str_detect(vp_EO[line, "context_before"], "resent")
+      || str_detect(vp_EO[line, "context_before"], "stand")
+      || str_detect(vp_EO[line, "context_before"], "start")
+      || str_detect(vp_EO[line, "context_before"], "stop")
+      || str_detect(vp_EO[line, "context_before"], "recommend")
+      || str_detect(vp_EO[line, "context_before"], "remember")
+      || str_detect(vp_EO[line, "context_before"], "risk")
+      || str_detect(vp_EO[line, "context_before"], "save")
+      || str_detect(vp_EO[line, "context_before"], "spy")) {
+      vp_EO[line, "nomclause_function"] <- "object"
+      vp_EO[line, "clause_type"] <- "nominal"
+    } else {}
+  } else {}
+}
+
+
+# raising structures (non-finte clause commonly functioning as OBJECT COMPLEMENT), König & Gast (2012: 233-234), Mair (1990b: 110, 174-176, 1990a: 86), Quirk et al. (1985: 1185, 1202-1203), Biber et al. (1999: 696, 701)
+### subject-to-object raising: if verb_form == past participle and one of these verbs (get, have, want, need, like, find, discover, leave) in the previous context, put nomclause_function == complement_object
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "participle_past") {
+    if (str_detect(vp_EO[line, "context_before"], "get") 
+      || str_detect(vp_EO[line, "context_before"], "got")
+      || str_detect(vp_EO[line, "context_before"], "have") 
+      || str_detect(vp_EO[line, "context_before"], "had")
+      || str_detect(vp_EO[line, "context_before"], "want")
+      || str_detect(vp_EO[line, "context_before"], "need")
+      || str_detect(vp_EO[line, "context_before"], "like")
+      || str_detect(vp_EO[line, "context_before"], "find")
+      || str_detect(vp_EO[line, "context_before"], "discover")
+      || str_detect(vp_EO[line, "context_before"], "left")
+      || str_detect(vp_EO[line, "context_before"], "leave")) {
+      vp_EO[line, "nomclause_function"] <- "complement_object"
+      vp_EO[line, "clause_type"] <- "nominal"
+    } else {}
+  } else {}
+}
+
+### subject-to-object raising: if verb_form == infinitive_to and one of these verbs (acknowledge, announce, assume, believe, choose, claim, conceive, consider, declare, estimate, except, feel, find, guarantee, imagine, intend, interpret, judge, know, mean, need, presume, proclaim, pronounce, show, suppose, take, trust, understand) in the previous context, put nomclause_function = complement_object
+for (line in 1:nrow(vp_EO)) {
+  if (vp_EO[line, "verb_form"] == "infinitive_to") {
+    if (str_detect(vp_EO[line, "context_before"], "acknowledge") 
+      || str_detect(vp_EO[line, "context_before"], "announce")
+      || str_detect(vp_EO[line, "context_before"], "assume")
+      || str_detect(vp_EO[line, "context_before"], "believe")
+      || str_detect(vp_EO[line, "context_before"], "choose")
+      || str_detect(vp_EO[line, "context_before"], "claim")
+      || str_detect(vp_EO[line, "context_before"], "conceive")
+      || str_detect(vp_EO[line, "context_before"], "consider")
+      || str_detect(vp_EO[line, "context_before"], "declare")
+      || str_detect(vp_EO[line, "context_before"], "estimate")
+      || str_detect(vp_EO[line, "context_before"], "except")
+      || str_detect(vp_EO[line, "context_before"], "feel")
+      || str_detect(vp_EO[line, "context_before"], "find")
+      || str_detect(vp_EO[line, "context_before"], "guarantee")
+      || str_detect(vp_EO[line, "context_before"], "imagine")
+      || str_detect(vp_EO[line, "context_before"], "intend")
+      || str_detect(vp_EO[line, "context_before"], "interpret")
+      || str_detect(vp_EO[line, "context_before"], "judge")
+      || str_detect(vp_EO[line, "context_before"], "know")
+      || str_detect(vp_EO[line, "context_before"], "mean")
+      || str_detect(vp_EO[line, "context_before"], "need")
+      || str_detect(vp_EO[line, "context_before"], "presume")
+      || str_detect(vp_EO[line, "context_before"], "proclaim")
+      || str_detect(vp_EO[line, "context_before"], "pronounce")
+      || str_detect(vp_EO[line, "context_before"], "show")
+      || str_detect(vp_EO[line, "context_before"], "suppose")
+      || str_detect(vp_EO[line, "context_before"], "take")
+      || str_detect(vp_EO[line, "context_before"], "trust")
+      || str_detect(vp_EO[line, "context_before"], "understand")) {
+      vp_EO[line, "nomclause_function"] <- "complement_object"
+      vp_EO[line, "clause_type"] <- "nominal"
+    } else {}
+  } else {}
+}
+
+```
+
+
+```{r German}
+## if verb_form == participle_past and clause_type == nominal and sentence-final punctuation in context_before, put nomclause_function = subject
+for (line in 1:nrow(vp_GO)) {
+  if (vp_GO[line, "clause_type"] == "nominal" && vp_GO[line, "verb_form"] == "participle_past") {
+    if (str_detect(vp_GO[line, "context_before"], "\\.") 
+      || str_detect(vp_GO[line, "context_before"], "\\?") 
+      || str_detect(vp_GO[line, "context_before"], "!")) {
+      vp_GO[line, "nomclause_function"] <- "subject"
+    } else {}
+  } else {}
+}
+
+# raising constructions (non-finte clause commonly functioning as OBJECT COMPLEMENT) ((Duden 2016: 826-827, Königs 2004: 72, Zifonun et al. 1997: 1411, Eisenberg 2020: 393-399)
+## if verb_form = infinitive_bare and one of these verbs (sehen, hören, fühlen, spüren, lassen, machen, heißen, schicken, lehren, finden) in the preceding context, put nomclause_function = complement_object
+for (line in 1:nrow(vp_GO)) {
+  if (vp_GO[line, "verb_form"] == "infinitive_bare") {
+    if (str_detect(vp_GO[line, "context_before"], "sehen") 
+      || str_detect(vp_GO[line, "context_before"], "sah")
+      || str_detect(vp_GO[line, "context_before"], "sehe")
+      || str_detect(vp_GO[line, "context_before"], "siehst")
+      || str_detect(vp_GO[line, "context_before"], "sieht")
+      || str_detect(vp_GO[line, "context_before"], "hören")
+      || str_detect(vp_GO[line, "context_before"], "hörte")
+      || str_detect(vp_GO[line, "context_before"], "höre")
+      || str_detect(vp_GO[line, "context_before"], "fühle")
+      || str_detect(vp_GO[line, "context_before"], "fühlt")
+      || str_detect(vp_GO[line, "context_before"], "spüre")
+      || str_detect(vp_GO[line, "context_before"], "lassen")
+      || str_detect(vp_GO[line, "context_before"], "ließ")
+      || str_detect(vp_GO[line, "context_before"], "lasse")
+      || str_detect(vp_GO[line, "context_before"], "machen")
+      || str_detect(vp_GO[line, "context_before"], "machte")
+      || str_detect(vp_GO[line, "context_before"], "heißen")
+      || str_detect(vp_GO[line, "context_before"], "hieß")
+      || str_detect(vp_GO[line, "context_before"], "schicken")
+      || str_detect(vp_GO[line, "context_before"], "schickte")
+      || str_detect(vp_GO[line, "context_before"], "lehren")
+      || str_detect(vp_GO[line, "context_before"], "lehrte")
+      || str_detect(vp_GO[line, "context_before"], "finden")
+      || str_detect(vp_GO[line, "context_before"], "fand")
+      || str_detect(vp_GO[line, "context_before"], "finde")) {
+      vp_GO[line, "nomclause_function"] <- "subject"
+      vp_GO[line, "clause_type"] <- "nominal"
+    } else {}
+  } else {}
+}
+```
+
+
+
+```{r}
+View(vp_GO)
+View(vp_EO)
+```
+
+
+#4. Writing results to file
+
+```{r}
+## this does not need to be run, I already created and saved these files.
+write_xlsx(vp_EO, path = "vp_EO_messy.xlsx")
+write_xlsx(vp_GO, path = "vp_GO_messy.xlsx")
+```
+
